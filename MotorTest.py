@@ -5,20 +5,25 @@ from datetime import datetime, timedelta
 
 DIR = 18
 STEP_M1 = 19
-STEP_M2 = 20
-EN = 21
+DIR_M1 = 20
+STEP_M2 = 21
+DIR_M2 = 22
+EN = 22
 
 STEPS_PER_REV = 1600
 
 acceleration = 10 # steps/sec^2
 
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(DIR, GPIO.OUT)
-GPIO.setup(STEP, GPIO.OUT)
+GPIO.setup(STEP_M1, GPIO.OUT)
+GPIO.setup(DIR_M1, GPIO.OUT)
+GPIO.setup(STEP_M2, GPIO.OUT)
+GPIO.setup(DIR_M2, GPIO.OUT)
 GPIO.setup(EN, GPIO.OUT)
 
 GPIO.output(EN, 0)
-GPIO.output(DIR, 1)
+GPIO.output(DIR_M1, 1)
+GPIO.output(DIR_M2, 0)
 
 def stepOne():
     GPIO.output(STEP_M1, 1)
