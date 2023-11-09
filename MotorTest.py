@@ -1,4 +1,5 @@
 import RPi.GPIO as GPIO
+import math
 from time import sleep
 from datetime import datetime, timedelta
 
@@ -6,14 +7,8 @@ DIR = 18
 STEP = 19
 EN = 20
 
+acceleration = 1 # steps/sec^2
 
-
-STEPS_PER_REV = 1600
-desired_rpm = 120
-
-step_period = 60/(STEPS_PER_REV*desired_rpm)
-
-EXPECTED_TIME = 60/desired_rpm
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(DIR, GPIO.OUT)
@@ -27,8 +22,12 @@ def stepOne():
     GPIO.output(STEP, 1)
     GPIO.output(STEP, 0)
 
+velocity = 0 # steps/sec
+
 try:
     start_time = datetime.now()
+
+    step_period = (-velocity + math.sqrt(velocity**2 + 4*acceleration))/(2*acceleration) 
 
     for i in range(STEPS_PER_REV):
         next_time = start_time + timedelta(seconds = (i+1) * step_period)
@@ -38,9 +37,6 @@ try:
             pass
     
     delta = (datetime.now() - start_time).total_seconds()
-    print(EXPECTED_TIME)
-    print(delta)
-    print("Error: " + str(round((delta - EXPECTED_TIME)/EXPECTED_TIME * 100 * 100)/100) + "%")
 finally:
     sleep(0.1) # Allow motor time to come to a stop before disabling it
     GPIO.output(EN, 1)
