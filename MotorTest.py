@@ -38,7 +38,8 @@ try:
 
         while(datetime.now() < next_time): # wait for the rest of the step period
             pass
-    
+        
+        velocity = 1 / step_period
     delta = (datetime.now() - start_time).total_seconds()
 finally:
     sleep(0.1) # Allow motor time to come to a stop before disabling it
