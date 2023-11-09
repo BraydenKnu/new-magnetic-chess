@@ -45,6 +45,7 @@ try:
         
         velocity = 1 / step_period
 
+    start_time = datetime.now()
     for i in range(STEPS_PER_REV * 5):
         next_time = start_time + timedelta(seconds = (i+1) * step_period)
         stepOne()
