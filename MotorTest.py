@@ -44,6 +44,14 @@ try:
             pass
         
         velocity = 1 / step_period
+
+    for i in range(STEPS_PER_REV * 5):
+        next_time = start_time + timedelta(seconds = (i+1) * step_period)
+        stepOne()
+
+        while(datetime.now() < next_time): # wait for the rest of the step period
+            pass
+    
     delta = (datetime.now() - start_time).total_seconds()
 finally:
     sleep(0.1) # Allow motor time to come to a stop before disabling it
