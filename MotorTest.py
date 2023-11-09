@@ -12,7 +12,7 @@ EN = 22
 
 STEPS_PER_REV = 1600
 
-acceleration = 100 # steps/sec^2
+acceleration = 1000 # steps/sec^2
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(STEP_M1, GPIO.OUT)
