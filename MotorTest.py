@@ -7,6 +7,8 @@ DIR = 18
 STEP = 19
 EN = 20
 
+STEPS_PER_REV = 1600
+
 acceleration = 1 # steps/sec^2
 
 
