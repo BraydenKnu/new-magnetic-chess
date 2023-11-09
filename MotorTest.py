@@ -36,7 +36,6 @@ try:
 
     for i in range(STEPS_PER_REV):
         step_period = (-velocity + math.sqrt(velocity**2 + 4*acceleration))/(2*acceleration)
-        print(step_period)
 
         next_time = start_time + timedelta(seconds = (i+1) * step_period)
         stepOne()
