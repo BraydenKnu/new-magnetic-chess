@@ -9,7 +9,7 @@ EN = 20
 
 STEPS_PER_REV = 1600
 
-acceleration = 1 # steps/sec^2
+acceleration = 10 # steps/sec^2
 
 
 GPIO.setmode(GPIO.BCM)
@@ -29,7 +29,8 @@ velocity = 0 # steps/sec
 try:
     start_time = datetime.now()
 
-    step_period = (-velocity + math.sqrt(velocity**2 + 4*acceleration))/(2*acceleration) 
+    step_period = (-velocity + math.sqrt(velocity**2 + 4*acceleration))/(2*acceleration)
+    print(step_period)
 
     for i in range(STEPS_PER_REV):
         next_time = start_time + timedelta(seconds = (i+1) * step_period)
