@@ -4,13 +4,13 @@ from time import sleep
 from datetime import datetime, timedelta
 
 DIR = 18
-STEP = 19
-EN = 20
+STEP_M1 = 19
+STEP_M2 = 20
+EN = 21
 
 STEPS_PER_REV = 1600
 
 acceleration = 10 # steps/sec^2
-
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(DIR, GPIO.OUT)
@@ -21,8 +21,8 @@ GPIO.output(EN, 0)
 GPIO.output(DIR, 1)
 
 def stepOne():
-    GPIO.output(STEP, 1)
-    GPIO.output(STEP, 0)
+    GPIO.output(STEP_M1, 1)
+    GPIO.output(STEP_M1, 0)
 
 velocity = 0 # steps/sec
 
