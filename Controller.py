@@ -85,17 +85,24 @@ while True:
         calibrate()
     
     # Get periods
-    XstepPeriod = SPEED_MULTIPLIER/Xvel
-    YstepPeriod = SPEED_MULTIPLIER/Yvel
+    if (Xvel == 0):
+        XstepPeriod = 0
+    else:
+        XstepPeriod = SPEED_MULTIPLIER/Xvel
+
+    if (Yvel == 0):
+        YstepPeriod = 0
+    else:
+        YstepPeriod = SPEED_MULTIPLIER/Yvel
     
     XnextTime = lastXstepTime + timedelta(seconds = (i+1) * XstepPeriod)
     YnextTime = lastYstepTime + timedelta(seconds = (i+1) * YstepPeriod)
 
     current_time = datetime.now()
     
-    if current_time > XnextTime:
+    if current_time > XnextTime and Xvel != 0:
         step(0)
         lastXstepTime = current_time
-    if current_time > YnextTime:
+    if current_time > YnextTime and Yvel != 0:
         step(1)
         lastYstepTime = current_time
