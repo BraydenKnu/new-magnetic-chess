@@ -142,7 +142,7 @@ try:
             lastYstepTime = current_time
 
         if (current_time - lastDebugTime).total_seconds() > DEBUG_PERIOD:
-            print("Xvel: " + str(Xvel) + " Yvel: " + str(Yvel))
+            print("Xvel: " + str(Xvel) + " Yvel: " + str(Yvel) + "\r")
             lastDebugTime = current_time
         
 finally:
