@@ -98,8 +98,10 @@ lastYstepTime = datetime.now()
 
 calibrate()
 
+DEBUG_PERIOD = 0.5
+lastDebugTime = datetime.now()
+
 try:
-        
     while True:
         joystickInputs = getCalibratedJS()
         Xvel = joystickInputs[0] * SPEED_MULTIPLIER
@@ -127,8 +129,8 @@ try:
         else:
             YstepPeriod = 1/Yvel
         
-        XnextTime = lastXstepTime + timedelta(XstepPeriod)
-        YnextTime = lastYstepTime + timedelta(YstepPeriod)
+        XnextTime = lastXstepTime + timedelta(seconds=XstepPeriod)
+        YnextTime = lastYstepTime + timedelta(seconds=YstepPeriod)
 
         current_time = datetime.now()
         
@@ -138,6 +140,11 @@ try:
         if current_time > YnextTime and Yvel != 0:
             step(1)
             lastYstepTime = current_time
+
+        if (current_time - lastDebugTime).total_seconds() > DEBUG_PERIOD:
+            print("Xvel: " + str(Xvel) + " Yvel: " + str(Yvel))
+            lastDebugTime = current_time
+        
 finally:
     # Cleanup GPIO
     GPIO.output(EN, 1)
