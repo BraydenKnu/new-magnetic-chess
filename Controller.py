@@ -85,8 +85,8 @@ while True:
         calibrate()
     
     # Get periods
-    XstepPeriod = SPEED_MULTIPLIER/velocity
-    YstepPeriod = SPEED_MULTIPLIER/velocity
+    XstepPeriod = SPEED_MULTIPLIER/Xvel
+    YstepPeriod = SPEED_MULTIPLIER/Yvel
     
     XnextTime = lastXstepTime + timedelta(seconds = (i+1) * XstepPeriod)
     YnextTime = lastYstepTime + timedelta(seconds = (i+1) * YstepPeriod)
