@@ -36,8 +36,9 @@ GPIO.setup(DIR_M2, GPIO.OUT)
 GPIO.setup(EN, GPIO.OUT)
 
 GPIO.output(EN, 0)
-GPIO.output(DIR_M1, 1)
-GPIO.output(DIR_M2, 0)
+
+Xdir = 0
+Ydir = 0
 
 def step(motor):
     if motor == 0:
@@ -46,6 +47,25 @@ def step(motor):
     if motor == 1:
         GPIO.output(STEP_M2, 1)
         GPIO.output(STEP_M2, 0)
+
+def setDirections(Xvel, Yvel):
+    global Xdir
+    global Ydir
+
+    # When changing directions, set the pins. Otherwise, ignore.
+    if Xvel > 0 and Xdir != 1:
+        GPIO.output(DIR_M1, 1)
+        Xdir = 1
+    elif Xvel < 0 and Xdir != 0:
+        GPIO.output(DIR_M1, 0)
+        Xdir = 0
+    
+    if Yvel > 0 and Ydir != 1:
+        GPIO.output(DIR_M2, 1)
+        Ydir = 1
+    elif Yvel < 0 and Ydir != 0:
+        GPIO.output(DIR_M2, 0)
+        Ydir = 0
 
 
 pygame.init()
