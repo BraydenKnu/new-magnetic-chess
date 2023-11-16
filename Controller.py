@@ -95,8 +95,8 @@ while True:
     else:
         YstepPeriod = SPEED_MULTIPLIER/Yvel
     
-    XnextTime = lastXstepTime + timedelta(seconds = (i+1) * XstepPeriod)
-    YnextTime = lastYstepTime + timedelta(seconds = (i+1) * YstepPeriod)
+    XnextTime = lastXstepTime + timedelta(XstepPeriod)
+    YnextTime = lastYstepTime + timedelta(YstepPeriod)
 
     current_time = datetime.now()
     
