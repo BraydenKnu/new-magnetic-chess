@@ -105,6 +105,11 @@ try:
         Xvel = joystickInputs[0] * SPEED_MULTIPLIER
         Yvel = joystickInputs[1] * SPEED_MULTIPLIER
 
+        setDirections(Xvel, Yvel)
+
+        Xvel = abs(Xvel)
+        Yvel = abs(Yvel)
+
         if controller.get_button(0): # If A is pressed, calibrate
             calibrate()
 
