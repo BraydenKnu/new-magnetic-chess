@@ -47,8 +47,10 @@ def step(motor):
         GPIO.output(STEP_M2, 1)
         GPIO.output(STEP_M2, 0)
 
+
 pygame.init()
 pygame.joystick.init()
+
 
 # Connect to conrtoller
 controller = pygame.joystick.Joystick(0)
@@ -76,33 +78,42 @@ lastYstepTime = datetime.now()
 
 calibrate()
 
-while True:
-    joystickInputs = getCalibratedJS()
-    Xvel = joystickInputs[0] * SPEED_MULTIPLIER
-    Yvel = joystickInputs[1] * SPEED_MULTIPLIER
+try:
+        
+    while True:
+        joystickInputs = getCalibratedJS()
+        Xvel = joystickInputs[0] * SPEED_MULTIPLIER
+        Yvel = joystickInputs[1] * SPEED_MULTIPLIER
 
-    if controller.get_button(0): # If A is pressed, calibrate
-        calibrate()
-    
-    # Get periods
-    if (Xvel == 0):
-        XstepPeriod = 0
-    else:
-        XstepPeriod = SPEED_MULTIPLIER/Xvel
+        if controller.get_button(0): # If A is pressed, calibrate
+            calibrate()
 
-    if (Yvel == 0):
-        YstepPeriod = 0
-    else:
-        YstepPeriod = SPEED_MULTIPLIER/Yvel
-    
-    XnextTime = lastXstepTime + timedelta(XstepPeriod)
-    YnextTime = lastYstepTime + timedelta(YstepPeriod)
+        if controller.get_button(1): # If B is pressed, exit.
+            break
+        
+        # Get periods
+        if (Xvel == 0):
+            XstepPeriod = 0
+        else:
+            XstepPeriod = SPEED_MULTIPLIER/Xvel
 
-    current_time = datetime.now()
-    
-    if current_time > XnextTime and Xvel != 0:
-        step(0)
-        lastXstepTime = current_time
-    if current_time > YnextTime and Yvel != 0:
-        step(1)
-        lastYstepTime = current_time
+        if (Yvel == 0):
+            YstepPeriod = 0
+        else:
+            YstepPeriod = SPEED_MULTIPLIER/Yvel
+        
+        XnextTime = lastXstepTime + timedelta(XstepPeriod)
+        YnextTime = lastYstepTime + timedelta(YstepPeriod)
+
+        current_time = datetime.now()
+        
+        if current_time > XnextTime and Xvel != 0:
+            step(0)
+            lastXstepTime = current_time
+        if current_time > YnextTime and Yvel != 0:
+            step(1)
+            lastYstepTime = current_time
+finally:
+    # Cleanup GPIO
+    GPIO.output(EN, 1)
+    GPIO.cleanup()
