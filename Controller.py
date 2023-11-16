@@ -95,12 +95,12 @@ try:
         if (Xvel == 0):
             XstepPeriod = 0
         else:
-            XstepPeriod = SPEED_MULTIPLIER/Xvel
+            XstepPeriod = 1/Xvel
 
         if (Yvel == 0):
             YstepPeriod = 0
         else:
-            YstepPeriod = SPEED_MULTIPLIER/Yvel
+            YstepPeriod = 1/Yvel
         
         XnextTime = lastXstepTime + timedelta(XstepPeriod)
         YnextTime = lastYstepTime + timedelta(YstepPeriod)
