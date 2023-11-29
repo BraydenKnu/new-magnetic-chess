@@ -122,6 +122,9 @@ try:
     move(DOWN_RIGHT, 2000)
 
 finally:
+    # Spin down motors
+    sleep(0.2)
+    
     # Cleanup GPIO
     GPIO.output(PIN_EN, 1)
     GPIO.cleanup()
