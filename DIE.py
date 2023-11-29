@@ -10,8 +10,8 @@ GPIO.setup(PIN_EN, GPIO.OUT)
 
 for i in range(100):
     GPIO.output(PIN_EN, 1)
-    sleep(0.05)
+    sleep(0.005)
     GPIO.output(PIN_EN, 0)
-    sleep(0.05)
+    sleep(0.005)
 
 GPIO.cleanup()
