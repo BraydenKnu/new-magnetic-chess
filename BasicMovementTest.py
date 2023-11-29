@@ -47,18 +47,15 @@ def multi_steps(motor, direction, steps):
     
     period = 1.0/SPEED
     for i in range(0, steps):
-        next_time = last_step_time + timedelta(seconds=period)
+        next_time = datetime.now() + timedelta(seconds=period)
 
         current_time = datetime.now()
 
         # Wait until the next step is due
         while current_time < next_time:
             current_time = datetime.now()
+        
         step(motor)
-
-
-last_step_time = datetime.now()
-lastYstepTime = datetime.now()
 
 try:
     # do a diamond shape
