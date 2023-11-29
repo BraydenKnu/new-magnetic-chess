@@ -58,11 +58,10 @@ def multi_steps(motor, direction, steps):
 
 try:
     # do a diamond shape
-    for i in range(2):
-        multi_steps(0, 1, STEPS_PER_REV)
-        multi_steps(1, 1, STEPS_PER_REV)
-        multi_steps(0, 0, STEPS_PER_REV)
-        multi_steps(1, 0, STEPS_PER_REV)
+    multi_steps(0, 1, STEPS_PER_REV)
+    multi_steps(1, 1, STEPS_PER_REV)
+    multi_steps(0, 0, STEPS_PER_REV)
+    multi_steps(1, 0, STEPS_PER_REV)
     
     # Test EN pin on and off
     for i in range(3):
