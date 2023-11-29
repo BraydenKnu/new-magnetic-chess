@@ -58,8 +58,8 @@ GPIO.output(PIN_EN, 0)
 m1_dir = 0
 m2_dir = 0
 
-GPIO.output(PIN_DIR_M1, Xdir)
-GPIO.output(PIN_DIR_M2, Ydir)
+GPIO.output(PIN_DIR_M1, m1_dir)
+GPIO.output(PIN_DIR_M2, m2_dir)
 
 def step(motor1, motor2, dir1, dir2):
     global m1_dir
