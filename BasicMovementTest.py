@@ -107,14 +107,14 @@ def move(direction, steps):
 
 try:
     move(UP, 1000)
+    move(RIGHT, 1000)
     move(DOWN, 1000)
     move(LEFT, 1000)
-    move(RIGHT, 1000)
 
-    move(UP_LEFT, 2000)
-    move(UP_RIGHT, 2000)
-    move(DOWN_LEFT, 2000)
-    move(DOWN_RIGHT, 2000)
+    move(UP_LEFT, 1000)
+    move(UP_RIGHT, 1000)
+    move(DOWN_LEFT, 1000)
+    move(DOWN_RIGHT, 1000)
 
 finally:
     # Spin down motors
