@@ -13,7 +13,7 @@ EN = 22
 
 STEPS_PER_REV = 1600
 
-SPEED = 1600
+SPEED = 3200
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(STEP_M1, GPIO.OUT)
@@ -58,10 +58,10 @@ def multi_steps(motor, direction, steps):
 
 try:
     # do a diamond shape
-    multi_steps(0, 1, 500)
-    multi_steps(1, 1, 500)
-    multi_steps(0, 0, 500)
-    multi_steps(1, 0, 500)
+    multi_steps(0, 1, 1600)
+    multi_steps(1, 1, 1600)
+    multi_steps(0, 0, 1600)
+    multi_steps(1, 0, 1600)
 
 finally:
     # Cleanup GPIO
