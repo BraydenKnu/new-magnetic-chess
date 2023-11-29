@@ -62,7 +62,8 @@ try:
     multi_steps(1, 1, STEPS_PER_REV)
     multi_steps(0, 0, STEPS_PER_REV)
     multi_steps(1, 0, STEPS_PER_REV)
-        
+    sleep(0.2)
+
 finally:
     # Cleanup GPIO
     GPIO.output(EN, 1)
