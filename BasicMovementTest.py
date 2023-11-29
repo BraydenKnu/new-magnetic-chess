@@ -29,10 +29,10 @@ DOWN_RIGHT = 7
 # Motor Settings
 # (en_motor1, en_motor2, dir_motor1, dir_motor2)
 MOTOR_SETTINGS = {
-    UP:         (1, 1, 0, 1),
-    DOWN:       (1, 1, 1, 0),
-    LEFT:       (1, 1, 1, 1),
-    RIGHT:      (1, 1, 0, 0),
+    UP:         (1, 1, 1, 1),
+    DOWN:       (1, 1, 0, 0),
+    LEFT:       (1, 1, 0, 1),
+    RIGHT:      (1, 1, 1, 0),
     UP_LEFT:    (0, 1, 0, 1),
     UP_RIGHT:   (1, 0, 1, 0),
     DOWN_LEFT:  (0, 1, 1, 0),
