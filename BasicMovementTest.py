@@ -106,15 +106,10 @@ def move(direction, steps):
         step(motor1, motor2, dir_m1, dir_m2)
 
 try:
-    # do a left-right-left-right up-down-up-down shape
-    move(LEFT, 1000)
-    move(RIGHT, 1000)
-    move(LEFT, 1000)
-    move(RIGHT, 1000)
     move(UP, 1000)
     move(DOWN, 1000)
-    move(UP, 1000)
-    move(DOWN, 1000)
+    move(LEFT, 1000)
+    move(RIGHT, 1000)
 
     move(UP_LEFT, 2000)
     move(UP_RIGHT, 2000)
