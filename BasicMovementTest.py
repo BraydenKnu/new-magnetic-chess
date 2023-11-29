@@ -107,6 +107,12 @@ def move(direction, steps):
 
 try:
     # do a left-right-left-right up-down-up-down shape
+
+    for i in range(1000):
+        # step motor 1 and wait 0.01 s
+        step(1, 0, 0, 0)
+        time.sleep(0.01)
+    
     move(LEFT, 1000)
     move(RIGHT, 1000)
     move(LEFT, 1000)
