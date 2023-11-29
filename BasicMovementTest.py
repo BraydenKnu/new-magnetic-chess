@@ -5,11 +5,10 @@ import math
 from time import sleep
 from datetime import datetime, timedelta
 
-DIR = 18
-STEP_M1 = 19
-DIR_M1 = 20
-STEP_M2 = 21
-DIR_M2 = 22
+STEP_M1 = 18
+DIR_M1 = 19
+STEP_M2 = 20
+DIR_M2 = 21
 EN = 22
 
 STEPS_PER_REV = 1600
