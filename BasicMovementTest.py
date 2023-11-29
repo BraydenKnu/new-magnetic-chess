@@ -29,8 +29,8 @@ DOWN_RIGHT = 7
 # Motor Settings
 # (en_motor1, en_motor2, dir_motor1, dir_motor2)
 MOTOR_SETTINGS = {
-    UP:         (1, 1, 0, 1),
-    DOWN:       (1, 1, 1, 0),
+    UP:         (1, 1, 1, 0),
+    DOWN:       (1, 1, 0, 1),
     LEFT:       (1, 1, 0, 0),
     RIGHT:      (1, 1, 1, 1),
     UP_LEFT:    (0, 1, 0, 1),
@@ -116,9 +116,10 @@ try:
     move(UP, 1000)
     move(DOWN, 1000)
 
-    # up left
     move(UP_LEFT, 2000)
-
+    move(UP_RIGHT, 2000)
+    move(DOWN_LEFT, 2000)
+    move(DOWN_RIGHT, 2000)
 
 finally:
     # Cleanup GPIO
