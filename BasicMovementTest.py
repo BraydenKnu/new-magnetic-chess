@@ -5,44 +5,90 @@ import math
 from time import sleep
 from datetime import datetime, timedelta
 
-STEP_M1 = 18
-DIR_M1 = 19
-STEP_M2 = 20
-DIR_M2 = 21
-EN = 22
+#
+# CORE-XY SYSTEM
+# ___________
+# |M1     M2|
+# |         |
+# |----O----|
+# |         |
+# |         |
+# ___________
+#
+
+# Directions
+UP = 0
+DOWN = 1
+LEFT = 2
+RIGHT = 3
+UP_LEFT = 4
+UP_RIGHT = 5
+DOWN_LEFT = 6
+DOWN_RIGHT = 7
+
+# Motor Settings
+# (en_motor1, en_motor2, dir_motor1, dir_motor2)
+MOTOR_SETTINGS = {
+    UP: (1, 1, 0, 1),
+    DOWN: (1, 1, 1, 0),
+    LEFT: (1, 1, 0, 0),
+    RIGHT: (1, 1, 1, 1),
+
+}
+
+PIN_STEP_M1 = 18
+PIN_DIR_M1 = 19
+PIN_STEP_M2 = 20
+PIN_DIR_M2 = 21
+PIN_EN = 22
 
 STEPS_PER_REV = 1600
-
-SPEED = 3200
+SPEED = 1600
 
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(STEP_M1, GPIO.OUT)
-GPIO.setup(DIR_M1, GPIO.OUT)
-GPIO.setup(STEP_M2, GPIO.OUT)
-GPIO.setup(DIR_M2, GPIO.OUT)
-GPIO.setup(EN, GPIO.OUT)
+GPIO.setup(PIN_STEP_M1, GPIO.OUT)
+GPIO.setup(PIN_DIR_M1, GPIO.OUT)
+GPIO.setup(PIN_STEP_M2, GPIO.OUT)
+GPIO.setup(PIN_DIR_M2, GPIO.OUT)
+GPIO.setup(PIN_EN, GPIO.OUT)
 
-GPIO.output(EN, 0)
+GPIO.output(PIN_EN, 0)
 
-Xdir = 0
-Ydir = 0
+# current values
+m1_dir = 0
+m2_dir = 0
 
-GPIO.output(DIR_M1, Xdir)
-GPIO.output(DIR_M2, Ydir)
+GPIO.output(PIN_DIR_M1, Xdir)
+GPIO.output(PIN_DIR_M2, Ydir)
 
-def step(motor):
-    if motor == 0:
-        GPIO.output(STEP_M1, 1)
-        GPIO.output(STEP_M1, 0)
-    if motor == 1:
-        GPIO.output(STEP_M2, 1)
-        GPIO.output(STEP_M2, 0)
+def step(motor1, motor2, dir1, dir2):
+    global m1_dir
+    global m2_dir
+    # set directions if they have changed
+    if dir1 != m1_dir:
+        GPIO.output(PIN_DIR_M1, dir1)
+        m1_dir = dir1
+    if dir2 != m2_dir:
+        GPIO.output(PIN_DIR_M2, dir2)
+        m2_dir = dir2
 
-def multi_steps(motor, direction, steps):
-    if motor == 0:
-        GPIO.output(DIR_M1, direction)
-    if motor == 1:
-        GPIO.output(DIR_M2, direction)
+    # Try and fire motors at the same time (GPIO.output is a bit slow)
+    if motor1:
+        GPIO.output(PIN_STEP_M1, 1)
+    if motor2:
+        GPIO.output(PIN_STEP_M2, 1)
+    
+    if motor1:
+        GPIO.output(PIN_STEP_M1, 0)
+    if motor2:
+        GPIO.output(PIN_STEP_M2, 0)
+
+def move(direction, steps):
+    # Get motor settings
+    motor1, motor2, dir_m1, dir_m2 = MOTOR_SETTINGS[direction]
+
+    GPIO.output(PIN_DIR_M1, dir_m1)
+    GPIO.output(PIN_DIR_M2, dir_m2)
     
     period = 1.0/SPEED
     for i in range(0, steps):
@@ -54,16 +100,21 @@ def multi_steps(motor, direction, steps):
         while current_time < next_time:
             current_time = datetime.now()
         
-        step(motor)
+        step(motor1, motor2, dir_m1, dir_m2)
 
 try:
-    # do a diamond shape
-    multi_steps(0, 1, 1600)
-    multi_steps(1, 1, 1600)
-    multi_steps(0, 0, 1600)
-    multi_steps(1, 0, 1600)
+    # do a left-right-left-right up-down-up-down shape
+    move(LEFT, 1000)
+    move(RIGHT, 1000)
+    move(LEFT, 1000)
+    move(RIGHT, 1000)
+    move(UP, 1000)
+    move(DOWN, 1000)
+    move(UP, 1000)
+    move(DOWN, 1000)
+
 
 finally:
     # Cleanup GPIO
-    GPIO.output(EN, 1)
+    GPIO.output(PIN_EN, 1)
     GPIO.cleanup()
