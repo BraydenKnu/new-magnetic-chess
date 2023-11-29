@@ -64,7 +64,7 @@ m2_dir = 0
 GPIO.output(PIN_DIR_M1, m1_dir)
 GPIO.output(PIN_DIR_M2, m2_dir)
 
-def step(motor1, motor2, dir1, dir2):
+def step_advanced(motor1, motor2, dir1, dir2):
     global m1_dir
     global m2_dir
     # set directions if they have changed
@@ -86,13 +86,11 @@ def step(motor1, motor2, dir1, dir2):
     if motor2:
         GPIO.output(PIN_STEP_M2, 0)
 
-def move(direction, steps):
-    # Get motor settings
+def step(direction):
     motor1, motor2, dir_m1, dir_m2 = MOTOR_SETTINGS[direction]
+    step_advanced(motor1, motor2, dir_m1, dir_m2)
 
-    GPIO.output(PIN_DIR_M1, dir_m1)
-    GPIO.output(PIN_DIR_M2, dir_m2)
-    
+def move(direction, steps):
     period = 1.0/SPEED
     for i in range(0, steps):
         next_time = datetime.now() + timedelta(seconds=period)
@@ -103,7 +101,7 @@ def move(direction, steps):
         while current_time < next_time:
             current_time = datetime.now()
         
-        step(motor1, motor2, dir_m1, dir_m2)
+        step(direction)
 
 try:
     move(UP, 1000)
