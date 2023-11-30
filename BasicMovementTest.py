@@ -81,6 +81,8 @@ def step_advanced(motor1, motor2, dir1, dir2):
     if motor2:
         GPIO.output(PIN_STEP_M2, 1)
     
+    sleep(0.0001) # Wait for motors to fire
+
     if motor1:
         GPIO.output(PIN_STEP_M1, 0)
     if motor2:
