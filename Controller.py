@@ -1,15 +1,4 @@
 
-
-
-
-
-
-
-
-
-
-
-
 import pygame
 import time
 import RPi.GPIO as GPIO
@@ -17,55 +6,90 @@ import math
 from time import sleep
 from datetime import datetime, timedelta
 
-DIR = 18
-STEP_M1 = 19
-DIR_M1 = 20
-STEP_M2 = 21
-DIR_M2 = 22
-EN = 22
+#
+# CORE-XY SYSTEM
+# ___________
+# |         |
+# |         |
+# |----O----|
+# |         |
+# |         |
+# M1_______M2
+#
+
+# Directions
+UP = 0
+DOWN = 1
+LEFT = 2
+RIGHT = 3
+UP_LEFT = 4
+UP_RIGHT = 5
+DOWN_LEFT = 6
+DOWN_RIGHT = 7
+
+# Motor Settings
+# (en_motor1, en_motor2, dir_motor1, dir_motor2)
+MOTOR_SETTINGS = {
+    UP:         (1, 1, 1, 1),
+    DOWN:       (1, 1, 0, 0),
+    LEFT:       (1, 1, 0, 1),
+    RIGHT:      (1, 1, 1, 0),
+    UP_LEFT:    (0, 1, 0, 1),
+    UP_RIGHT:   (1, 0, 1, 0),
+    DOWN_LEFT:  (0, 1, 1, 0),
+    DOWN_RIGHT: (1, 0, 0, 1)
+}
+
+PIN_STEP_M1 = 18
+PIN_DIR_M1 = 19
+PIN_STEP_M2 = 20
+PIN_DIR_M2 = 21
+PIN_EN = 22
 
 STEPS_PER_REV = 1600
-
-SPEED_MULTIPLIER = STEPS_PER_REV
+SPEED_MULTIPLIER = 2400
 
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(STEP_M1, GPIO.OUT)
-GPIO.setup(DIR_M1, GPIO.OUT)
-GPIO.setup(STEP_M2, GPIO.OUT)
-GPIO.setup(DIR_M2, GPIO.OUT)
-GPIO.setup(EN, GPIO.OUT)
+GPIO.setup(PIN_STEP_M1, GPIO.OUT)
+GPIO.setup(PIN_DIR_M1, GPIO.OUT)
+GPIO.setup(PIN_STEP_M2, GPIO.OUT)
+GPIO.setup(PIN_DIR_M2, GPIO.OUT)
+GPIO.setup(PIN_EN, GPIO.OUT)
 
-GPIO.output(EN, 0)
+GPIO.output(PIN_EN, 0)
 
-Xdir = 0
-Ydir = 0
+# current values
+m1_dir = 0
+m2_dir = 0
 
-def step(motor):
-    if motor == 0:
-        GPIO.output(STEP_M1, 1)
-        GPIO.output(STEP_M1, 0)
-    if motor == 1:
-        GPIO.output(STEP_M2, 1)
-        GPIO.output(STEP_M2, 0)
+GPIO.output(PIN_DIR_M1, m1_dir)
+GPIO.output(PIN_DIR_M2, m2_dir)
 
-def setDirections(Xvel, Yvel):
-    global Xdir
-    global Ydir
+def step_advanced(motor1, motor2, dir1, dir2):
+    global m1_dir
+    global m2_dir
+    # set directions if they have changed
+    if dir1 != m1_dir:
+        GPIO.output(PIN_DIR_M1, dir1)
+        m1_dir = dir1
+    if dir2 != m2_dir:
+        GPIO.output(PIN_DIR_M2, dir2)
+        m2_dir = dir2
 
-    # When changing directions, set the pins. Otherwise, ignore.
-    if Xvel > 0 and Xdir != 1:
-        GPIO.output(DIR_M1, 1)
-        Xdir = 1
-    elif Xvel < 0 and Xdir != 0:
-        GPIO.output(DIR_M1, 0)
-        Xdir = 0
+    # Try and fire motors at the same time (GPIO.output is a bit slow)
+    if motor1:
+        GPIO.output(PIN_STEP_M1, 1)
+    if motor2:
+        GPIO.output(PIN_STEP_M2, 1)
     
-    if Yvel > 0 and Ydir != 1:
-        GPIO.output(DIR_M2, 1)
-        Ydir = 1
-    elif Yvel < 0 and Ydir != 0:
-        GPIO.output(DIR_M2, 0)
-        Ydir = 0
+    if motor1:
+        GPIO.output(PIN_STEP_M1, 0)
+    if motor2:
+        GPIO.output(PIN_STEP_M2, 0)
+
+def step(direction):
+    motor1, motor2, dir_m1, dir_m2 = MOTOR_SETTINGS[direction]
+    step_advanced(motor1, motor2, dir_m1, dir_m2)
 
 
 pygame.init()
@@ -98,16 +122,11 @@ lastYstepTime = datetime.now()
 
 calibrate()
 
-DEBUG_PERIOD = 0.5
-lastDebugTime = datetime.now()
-
 try:
     while True:
         joystickInputs = getCalibratedJS()
         Xvel = joystickInputs[0] * SPEED_MULTIPLIER
         Yvel = joystickInputs[1] * SPEED_MULTIPLIER
-
-        setDirections(Xvel, Yvel)
 
         Xvel = abs(Xvel)
         Yvel = abs(Yvel)
@@ -135,17 +154,19 @@ try:
         current_time = datetime.now()
         
         if current_time > XnextTime and Xvel != 0:
-            step(0)
+            if(Xvel > 0):
+                step(RIGHT)
+            else:
+                step(LEFT)
             lastXstepTime = current_time
         if current_time > YnextTime and Yvel != 0:
-            step(1)
+            if(Yvel > 0):
+                step(UP)
+            else:
+                step(DOWN)
             lastYstepTime = current_time
-
-        if (current_time - lastDebugTime).total_seconds() > DEBUG_PERIOD:
-            print("X dir = " + str(Xdir) + ", Y dir = " + str(Ydir))
-            lastDebugTime = current_time
         
 finally:
     # Cleanup GPIO
-    GPIO.output(EN, 1)
+    GPIO.output(PIN_EN, 1)
     GPIO.cleanup()
