@@ -138,12 +138,12 @@ try:
         if (Xvel == 0):
             XstepPeriod = 0
         else:
-            XstepPeriod = 1/Xvel
+            XstepPeriod = 1/abs(Xvel)
 
         if (Yvel == 0):
             YstepPeriod = 0
         else:
-            YstepPeriod = 1/Yvel
+            YstepPeriod = 1/abs(Yvel)
         
         XnextTime = lastXstepTime + timedelta(seconds=XstepPeriod)
         YnextTime = lastYstepTime + timedelta(seconds=YstepPeriod)
