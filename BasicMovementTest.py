@@ -119,5 +119,5 @@ finally:
     sleep(0.2)
 
     # Cleanup GPIO
-    GPIO.output(PIN_EN, 1)
+    # GPIO.output(PIN_EN, 1)
     GPIO.cleanup()
