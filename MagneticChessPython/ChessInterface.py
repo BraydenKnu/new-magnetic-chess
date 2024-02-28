@@ -44,9 +44,10 @@ BANK PIECES
 """
 
 # Imports
+import os
 from stockfish import Stockfish # (pip install stockfish) Documentation: https://pypi.org/project/stockfish/
 import chess                    # (pip install python-chess) Documentation: https://python-chess.readthedocs.io/en/latest/
-from . import PhysicalBoard
+from PhysicalBoard import PhysicalBoard
 
 # Constants
 RANKS = "12345678"
@@ -55,25 +56,59 @@ FILES_BANK1 = "wx"
 FILES_BANK2 = "yz"
 FILES_BANKS = FILES_BANK1 + FILES_BANK2
 ALL_FILES = FILES_STANDARD + FILES_BANKS
-STOCKFISH_PATH = '/home/chess/new-magnetic-chess/stockfish-16-linux/src/stockfish'
+
+# detect whether we're on windows or linux
+STOCKFISH_PATHS = {
+    'windows': '..\\stockfish-16-windows\\stockfish-windows-x86-64-avx2.exe',
+    'linux': '/home/chess/new-magnetic-chess/stockfish-16-linux/src/stockfish'
+}
+os_name = os.name
+if (os_name == 'nt'): # Windows
+    current_os = 'windows'
+else:
+    current_os = 'linux'
+STOCKFISH_PATH = STOCKFISH_PATHS[current_os]
 
 # Bank piece types
 BANK_PIECE_TYPES = {
-    'w8': chess.PAWN, 'x8': chess.QUEEN, 'y8': chess.QUEEN, 'z8': chess.PAWN,
-    'w7': chess.PAWN, 'x7': chess.QUEEN, 'y7': chess.QUEEN, 'z7': chess.PAWN,
-    'w6': chess.PAWN, 'x6': chess.ROOK,  'y6': chess.ROOK,  'z6': chess.PAWN,
-    'w5': chess.PAWN, 'x5': chess.ROOK,  'y5': chess.ROOK,  'z5': chess.PAWN,
-    'w4': chess.PAWN, 'x4': chess.BISHOP,'y4': chess.BISHOP,'z4': chess.PAWN,
-    'w3': chess.PAWN, 'x3': chess.BISHOP,'y3': chess.BISHOP,'z3': chess.PAWN,
-    'w2': chess.PAWN, 'x2': chess.KNIGHT,'y2': chess.KNIGHT,'z2': chess.PAWN,
-    'w1': chess.PAWN, 'x1': chess.KNIGHT,'y1': chess.KNIGHT,'z1': chess.PAWN
+    'w8': chess.PAWN, 'x8': chess.KNIGHT,'y8': chess.QUEEN, 'z8': chess.PAWN,
+    'w7': chess.PAWN, 'x7': chess.KNIGHT,'y7': chess.QUEEN, 'z7': chess.PAWN,
+    'w6': chess.PAWN, 'x6': chess.BISHOP,'y6': chess.ROOK,  'z6': chess.PAWN,
+    'w5': chess.PAWN, 'x5': chess.BISHOP,'y5': chess.ROOK,  'z5': chess.PAWN,
+    'w4': chess.PAWN, 'x4': chess.ROOK,  'y4': chess.BISHOP,'z4': chess.PAWN,
+    'w3': chess.PAWN, 'x3': chess.ROOK,  'y3': chess.BISHOP,'z3': chess.PAWN,
+    'w2': chess.PAWN, 'x2': chess.QUEEN, 'y2': chess.KNIGHT,'z2': chess.PAWN,
+    'w1': chess.PAWN, 'x1': chess.QUEEN, 'y1': chess.KNIGHT,'z1': chess.PAWN
 }
+
+# Bank fill order
+bankFillOrder = {
+    chess.WHITE: {
+        chess.PAWN: ['z8', 'z7', 'z6', 'z5', 'z4', 'z3', 'z2', 'z1'],
+        chess.QUEEN: ['y8', 'y7'],
+        chess.ROOK: ['y6', 'y5'],
+        chess.BISHOP: ['y4', 'y3'],
+        chess.KNIGHT: ['y2', 'y1']
+    },
+    chess.BLACK: {
+        chess.PAWN: ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7', 'w8'],
+        chess.QUEEN: ['x1', 'x2'],
+        chess.ROOK: ['x3', 'x4'],
+        chess.BISHOP: ['x5', 'x6'],
+        chess.KNIGHT: ['x7', 'x8']
+    }
+}
+filledBankSquares = {} # Keep track of which bank squares are filled
+for file in ALL_FILES:
+    for rank in RANKS:
+        filledBankSquares[file+rank] = False
 
 # Physical moves for each castling move
 WHITE_KINGSIDE_CASTLE_PHYSICAL = {'e1': False, 'f1': True, 'g1': True, 'h1': False}
 WHITE_QUEENSIDE_CASTLE_PHYSICAL = {'e1': False, 'd1': True, 'c1': True, 'a1': False}
 BLACK_KINGSIDE_CASTLE_PHYSICAL = {'e8': False, 'f8': True, 'g8': True, 'h8': False}
 BLACK_QUEENSIDE_CASTLE_PHYSICAL = {'e8': False, 'd8': True, 'c8': True, 'a8': False}
+
 # All possible en passant moves, of the form (pawn_start, pawn_end, captured_pawn)
 ALL_EN_PASSANT_PHYSICAL = []
 for file in range(len(FILES_STANDARD)):
@@ -86,24 +121,30 @@ for file in range(len(FILES_STANDARD)):
 
 class ChessInterface:
     def __init__(self):
-        self.__stockfish = Stockfish(STOCKFISH_PATH) # (pip install stockfish) Documentation: https://pypi.org/project/stockfish/
-        self.__board = chess.Board()
-        self.__physicalBoard = PhysicalBoard()
-        self.__stackLengthAfterMove = [] # Since moves can take multiple steps, we keep track of the final length of the stack after the move is complete 
-        self.__physicalMoveStack = []
-        self.__physicalMoveInProgress = []
+        self.stockfish = Stockfish(STOCKFISH_PATH) # (pip install stockfish) Documentation: https://pypi.org/project/stockfish/
+        self.board = chess.Board()
+        self.physicalBoard = PhysicalBoard()
+        self.stackLengthAfterMove = [] # Since moves can take multiple steps, we keep track of the final length of the stack after the move is complete 
+        self.physicalMoveStack = []
+        self.reedSwitchStateChanges = []
     
     def __getEmptyBankSquare(self, color, type):
-        # TODO: Return empty bank square for piece
-        pass
+        # Loop through the bank fill order to find the first empty square of the given type
+        for square in bankFillOrder[color][type]:
+            if (square not in filledBankSquares):
+                return square
+        return None
     
     def __getFilledBankSquare(self, color, type):
-        # TODO: Return last filled bank square for piece
-        pass
+        # Loop backwards through the bank fill order to find the most recently filled square of the given type
+        for square in reversed(bankFillOrder[color][type]):
+            if (square in filledBankSquares):
+                return square
+        return None
 
     def __movePhysical(self, extendedMove, sendCommand=True):
         # Move the piece on the physical board
-        self.__physicalMoveStack.append(extendedMove) # Push the move to the move stack
+        self.physicalMoveStack.append(extendedMove) # Push the move to the move stack
 
         # Get start and end
         start = extendedMove[0][0:2]
@@ -111,36 +152,36 @@ class ChessInterface:
         direct = extendedMove[1]
 
         if (sendCommand):
-            self.__physicalBoard.movePiece(start, end, direct=direct)
+            self.physicalBoard.movePiece(start, end, direct=direct)
     
-    def __undoPhysical(self, extendedMove, sendCommand=True):
+    def __undoPhysical(self, sendCommand=True):
         # Undo the move on the physical board
-        move = self.__physicalMoveStack.pop()
+        move = self.physicalMoveStack.pop()
         if (sendCommand):
-            self.__physicalBoard.movePiece(move[0][2:4], move[0][0:2], direct=move[1])
+            self.physicalBoard.movePiece(move[0][2:4], move[0][0:2], direct=move[1])
     
     def undoLastMove(self, sendCommands=True):
         # Undo the last move on the virtual board
-        self.__board.pop()
+        self.board.pop()
         
         # Undo the last move on the physical board
-        self.__stackLengthAfterMove.pop()
-        newLength = self.__stackLengthAfterMove[-1]
+        self.stackLengthAfterMove.pop()
+        newLength = self.stackLengthAfterMove[-1]
 
-        while (len(self.__physicalMoveStack) > newLength): # Remove physical moves until our stack length is correct
-            self.__undoPhysical(self.__physicalMoveStack[-1], sendCommand=sendCommands)
+        while (len(self.physicalMoveStack) > newLength): # Remove physical moves until our stack length is correct
+            self.__undoPhysical(self.physicalMoveStack[-1], sendCommand=sendCommands)
 
     def move(self, move, checkLegal=True, sendCommands=True):
-        if (checkLegal and move not in self.__board.legal_moves):
+        if (checkLegal and move not in self.board.legal_moves):
             print("Illegal move: " + move)
             return []
         
-        pieceType = self.__board.piece_type_at(move.from_square)
+        pieceType = self.board.piece_type_at(move.from_square)
         start = chess.square_name(move.from_square)
         end = chess.square_name(move.to_square)
 
         opposite = {chess.WHITE: chess.BLACK, chess.BLACK: chess.WHITE}
-        opponent = opposite[self.__board.turn]
+        opponent = opposite[self.board.turn]
 
         # Includes moving captured pieces to bank and castling
         physicalMoves = []
@@ -167,8 +208,8 @@ class ChessInterface:
             physicalMoves.append((capturedSquare + bankSquare, False)) # Move opponent's pawn to bank
         
         elif (move.promotion is not None): # Pawn Promotion
-            promotedBankSquare = self.__getFilledBankSquare(self.__board.turn, move.promotion)
-            removedBankSquare = self.__getEmptyBankSquare(self.__board.turn, pieceType)
+            promotedBankSquare = self.__getFilledBankSquare(self.board.turn, move.promotion)
+            removedBankSquare = self.__getEmptyBankSquare(self.board.turn, pieceType)
 
             physicalMoves.append((promotedBankSquare + end, False)) # Move the promoted piece from the bank to the board
             physicalMoves.append((start + removedBankSquare, True)) # Move our pawn back to our bank
@@ -183,15 +224,15 @@ class ChessInterface:
             physicalMoves.append((start + end, pieceType != chess.KNIGHT))
 
         # Move the piece on the virtual board
-        self.__board.push(chess.Move.from_uci(move))
+        self.board.push(chess.Move.from_uci(move))
 
         # Move the piece on the physical board
         for physicalMove in physicalMoves:
             self.__movePhysical(physicalMove, sendCommand=sendCommands)
-        self.__stackLengthAfterMove.append(len(self.__physicalMoveStack))
+        self.stackLengthAfterMove.append(len(self.physicalMoveStack))
     
     def checkDirectPath(self, start, end):
-        # Check if there is a direct, empty path between two squares
+        # Check if there is a direct, empty path between two squares. DOES NOT CHECK START AND END SQUARES.
         (startFile, startRank) = PhysicalBoard.getFileRankCoords(start)
         (endFile, endRank) = PhysicalBoard.getFileRankCoords(end)
 
@@ -214,8 +255,17 @@ class ChessInterface:
                     for file in range(minFile+1, maxFile):
                         intermediateSquaresFileRank.append((file, startRank))
                 else:
+                    # Which diagonal line are we on? / or \
+                    if ((startFile < endFile and startRank < endRank) or (startFile > endFile and startRank > endRank)): # /
+                        reverseRankList = False
+                    else: # \
+                        reverseRankList = True
+                    
                     fileRange = list(range(minFile+1, maxFile))
                     rankRange = list(range(minRank+1, maxRank))
+                    if (reverseRankList):
+                        rankRange.reverse()
+                    
                     for i in range(len(fileRange)):
                         intermediateSquaresFileRank.append((fileRange[i], rankRange[i]))
 
@@ -223,7 +273,9 @@ class ChessInterface:
                     # Convert back to square name
                     if (0 <= file <= 7 and 1 <= rank <= 8):
                         square = FILES_STANDARD[file] + RANKS[rank-1]
-                        if (self.__board.piece_at(chess.SQUARE_NAMES.index(square)) is not None):
+                        if (self.board.piece_at(chess.SQUARE_NAMES.index(square)) is not None):
+                            print(intermediateSquaresFileRank)
+                            print("Piece in the way: " + square)
                             return False
                     else:
                         return False # Outside standard board
@@ -232,13 +284,17 @@ class ChessInterface:
         else:
             return False
     
-    def getMoveFromPhysical(self):
-        # Get the move from the reed switches. Returns None if no move is detected.
-        self.__physicalBoard.updateReedSwitches()
-        modifiedReedSwitches = self.__physicalBoard.getModifiedReedSwitches()
+    def updatePhysicalMoveInProgress(self):
+        # Update the physical move in progress
+        self.physicalBoard.updateReedSwitches()
+        modifiedReedSwitches = self.physicalBoard.getModifiedReedSwitches()
 
         for square, state in modifiedReedSwitches:
-            self.__physicalMoveInProgress.append((square, state))
+            self.reedSwitchStateChanges.append((square, state))
+
+    def getMoveFromReedSwitches(self):
+        # Get the move from the reed switches. Returns None if no move is detected.
+        self.updatePhysicalMoveInProgress()
         
         originalStates = {}
         tempCurrentState = {}
@@ -249,7 +305,7 @@ class ChessInterface:
         increasedTotal = 0 # +1 for each square filled, -1 for each square emptied, should be 0 after a complete move
 
         # Populate the lists above
-        for (square, state) in self.__physicalMoveInProgress:
+        for (square, state) in self.reedSwitchStateChanges:
             tempCurrentState[square] = state
             increasedTotal += 1 if state else -1
             if (square not in originalStates): # Get original state of square if we haven't seen it yet
@@ -368,14 +424,14 @@ class ChessInterface:
                             if (state == True):
                                 bank = square
                         
-                        capturingPieceType = self.__board.piece_type_at(chess.SQUARE_NAMES.index(start))
+                        capturingPieceType = self.board.piece_type_at(chess.SQUARE_NAMES.index(start))
                         capturedPieceType = BANK_PIECE_TYPES[bank]
 
                         # Get legal captures that begin with the start square and capture the captured piece type
-                        legalMoves = self.__board.legal_moves
+                        legalMoves = self.board.legal_moves
                         legalCapturesFromStart = []
                         for move in legalMoves:
-                            if (move.from_square == chess.SQUARE_NAMES.index(start) and self.__board.piece_type_at(move.to_square) == capturedPieceType):
+                            if (move.from_square == chess.SQUARE_NAMES.index(start) and self.board.piece_type_at(move.to_square) == capturedPieceType):
                                 legalCapturesFromStart.append(move)
                         
                         mostLikelyMove = None
@@ -395,5 +451,14 @@ class ChessInterface:
                             physicalMoves.append((chess.square_name(mostLikelyMove.to_square) + bank, False))
                             physicalMoves.append((start + chess.square_name(mostLikelyMove.to_square), capturingPieceType != chess.KNIGHT))
 
-                    
-                
+    def update(self):
+        # Update physical board
+        self.board.update()      
+        self.updatePhysicalMoveInProgress()
+
+        move = self.getMoveFromReedSwitches() # TODO: Don't do this if no reed switches have changed
+        if (move != None):
+            # Wait to ensure validity - e.g. someone sliding a bishop doesn't trigger a move until they leave it at the end square
+            # Also ensure a move can be updated as long as the computer has not moved.
+            # TODO: Implement wait without delay
+            pass

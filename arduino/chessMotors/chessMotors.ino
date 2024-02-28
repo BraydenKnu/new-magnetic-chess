@@ -352,10 +352,12 @@ void loop() {
       if (readyToExecute) {
         executeNextCommand();
       }
-    } else {
+    } else { // No commands, idle state
       if (motorsEnabled && targetDistanceA == 0 && targetDistanceB == 0) {
         digitalWrite(PIN_EN, HIGH);
         motorsEnabled = false;
+        // TODO: actually turn off magnet
+        magnetUp = false;
       }
     }
     

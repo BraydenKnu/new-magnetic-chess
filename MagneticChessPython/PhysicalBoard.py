@@ -23,7 +23,7 @@ y   3 |_|_| |_|_|_|_|_|_|_|_| |_|_|
 
 EXTENDED MOVE NOTATION
 The board is extended to 12x8 to allow for the movement of the pieces to the banks.
-For example, d2z1 is valid.
+For example, d2z1 is a valid move.
 
 EXTENDED COORDINATE SYSTEM
 To support moving pieces to the corners of each square, rank/file coordinates have been converted
@@ -60,9 +60,9 @@ class PhysicalBoard:
         self.__prevCheckReedSwitches = {}
         self.reedSwitches = {}
         for fileRank in ALL_SQUARES:
-            self.__pastReedSwitches[fileRank] = False
+            self.__prevCheckReedSwitches[fileRank] = False
             self.reedSwitches[fileRank] = False
-        self.arduino = self.__beginSerial()
+        self.arduino = self.beginSerial()
 
     @staticmethod
     def getFileRankCoords(square):
@@ -71,8 +71,6 @@ class PhysicalBoard:
             print("square '" + str(square) + "' is not a string")
         if (len(square) != 2):
             print("Invalid square '" + str(square) + "'")
-        
-        square = PhysicalBoard.standardizeWithModifiers(square) # Takes input like 'f2' or 'w6' and returns (file, rank) coordinates
 
         # File
         file = 0
@@ -84,24 +82,30 @@ class PhysicalBoard:
             file = 9 + FILES_BANK2.index(square[0])
         
         # Rank
-        rank = int(square[2])
+        rank = int(square[1])
+
+        # More error checking
+        if (file not in [-3, -2, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10]):
+            print("Invalid file '" + square[0] + "'")
+        if (rank not in [1, 2, 3, 4, 5, 6, 7, 8]):
+            print("Invalid rank '" + square[1] + "'")
 
         return (file, rank)
 
     @staticmethod
-    def __getXY(square): # Takes input like 'f2' or 'w6' and returns xy coordinates
+    def getXY(square): # Takes input like 'f2' or 'w6' and returns xy coordinates
         (file, rank) = PhysicalBoard.getFileRankCoords(square)
-        return PhysicalBoard.__getXYFromFileRank(file, rank)
+        return PhysicalBoard.getXYFromFileRank((file, rank))
 
     @staticmethod
-    def __getXYFromFileRank(fileRankCoords):
+    def getXYFromFileRank(fileRankCoords):
         (file, rank) = fileRankCoords
         x = CALIBRATION_A1_CENTER_X + file * SQUARE_SIZE
         y = CALIBRATION_A1_CETNER_Y + rank * SQUARE_SIZE
         return (x, y)
 
     @staticmethod
-    def __getPath(start, end, direct=False, includeStart=True):
+    def getPath(start, end, direct=False, includeStart=True):
         """
         Gets a path from start to end that is garunteed not to cross any other squares (unless direct is True).
 
@@ -120,7 +124,7 @@ class PhysicalBoard:
         """
         path = [] # List of (file, rank) tuples
         (startFile, startRank) = PhysicalBoard.getFileRankCoords(start)
-        (endFile, endRank) = PhysicalBoard.__fileRankCoords(end)
+        (endFile, endRank) = PhysicalBoard.getFileRankCoords(end)
 
         if (includeStart):
             path.append((startFile, startRank))
@@ -136,8 +140,11 @@ class PhysicalBoard:
             waypoint1 = [startFile, startRank]
             # Note: waypoint2 is calculated only when needed
             waypoint3 = [endFile, endRank]
+            
+            fileDistance = abs(startFile - endFile)
+            rankDistance = abs(startRank - endRank)
+            includeWaypoint2 = fileDistance > 1 and rankDistance > 1
 
-            includeWaypoint2 = True
             # File change
             if (startFile < endFile): # Need to move right (+file)
                 waypoint1[0] += 0.5
@@ -146,7 +153,6 @@ class PhysicalBoard:
                 waypoint1[0] -= 0.5
                 waypoint3[0] += 0.5
             else: # startFile == endFile (move waypoints towards center - rank = 3.5)
-                includeWaypoint2 = False
                 if (startFile < 3.5):
                     waypoint1[0] += 0.5
                     waypoint3[0] += 0.5
@@ -162,7 +168,6 @@ class PhysicalBoard:
                 waypoint1[1] -= 0.5
                 waypoint3[1] += 0.5
             else: # startRank == endRank (move waypoints towards center - file = 4.5)
-                includeWaypoint2 = False
                 if (startRank < 4.5):
                     waypoint1[1] += 0.5
                     waypoint3[1] += 0.5
@@ -176,57 +181,62 @@ class PhysicalBoard:
                 waypoint2 = [waypoint3[0], waypoint1[1]] # New file, same rank
                 path.append((waypoint2[0], waypoint2[1]))
             path.append((waypoint3[0], waypoint3[1]))
+
+            # Add end
+            path.append((endFile, endRank))
         return path
     
 
     @staticmethod
-    def __buildCommand(x, y, magnetUp, optimizeRoute):
+    def buildCommand(x, y, magnetUp, optimizeRoute):
+        x = int(x)
+        y = int(y)
         if x < 0 or x > 999999 or y < 0 or y > 999999:
             print("Command to move to X: " + str(x) + ", Y: " + str(y) + " out of command size (positive, max 6 digits).")
             exit()
 
         magnetChar = 'U' if magnetUp else 'D' # Up vs Down
         optimizeChar = 'O' if optimizeRoute else 'P' # Optimize vs Precise
-        splitCommand = [magnetChar, optimizeChar, 'X', str(x.zfill(6)), 'Y', str(y.zfill(6))]
+        splitCommand = [magnetChar, optimizeChar, 'X', str(x).zfill(6), 'Y', str(y).zfill(6)]
         command = "".join(splitCommand)
 
         return command
 
     @staticmethod
-    def __getCommands(start, end, direct=False, includeStart=True, useMagnetWithDirect=True):
-        path = PhysicalBoard.__getPath(start, end, direct, includeStart)
+    def getCommands(start, end, direct=False, includeStart=True, useMagnetWithDirect=True):
+        path = PhysicalBoard.getPath(start, end, direct, includeStart)
         commands = []
 
-        for pathIndex, point in path:
+        for pathIndex in range(len(path)):
             isFirstCommand = (pathIndex == 0)
             isLastCommand = (pathIndex + 1 == len(path))
-            (x, y) = PhysicalBoard.__getXYFromFileRank(point)
+            (x, y) = PhysicalBoard.getXYFromFileRank(path[pathIndex])
 
             if (direct):
-                commands.append(PhysicalBoard.__buildCommand(x, y, magnetUp=useMagnetWithDirect, optimizeRoute=False))
+                commands.append(PhysicalBoard.buildCommand(x, y, magnetUp=((not isFirstCommand or not includeStart) and useMagnetWithDirect), optimizeRoute=False))
             elif (isFirstCommand and includeStart):
                 # Move directly to start with magnet down, if applicable
-                commands.append(PhysicalBoard.__buildCommand(x, y, magnetUp=False, optimizeRoute=False))
+                commands.append(PhysicalBoard.buildCommand(x, y, magnetUp=False, optimizeRoute=False))
             elif (isLastCommand):
                 # Move precisely to end, without optimizing
-                commands.append(PhysicalBoard.__buildCommand(x, y, magnetUp=True, optimizeRoute=False))
+                commands.append(PhysicalBoard.buildCommand(x, y, magnetUp=True, optimizeRoute=False))
             else:
-                commands.append(PhysicalBoard.__buildCommand(x, y, magnetUp=True, optimizeRoute=True))
+                commands.append(PhysicalBoard.buildCommand(x, y, magnetUp=True, optimizeRoute=True))
         
         return commands
     
-    def __queueCommand(self, command):
+    def enqueueCommand(self, command):
         self.commandQueue.append(command)
     
-    def __queueCommands(self, commands):
+    def enqueueCommands(self, commands):
         for command in commands:
-            self.__queueCommand(command)
+            self.enqueueCommand(command)
 
-    def __dequeueCommand(self):
+    def dequeueCommand(self):
         if (len(self.commandQueue) > 0):
             return self.commandQueue.pop(0)
     
-    def __beginSerial(self):
+    def beginSerial(self):
         # Open serial connection to Arduino
         connected = False
         while (not connected):
@@ -242,40 +252,59 @@ class PhysicalBoard:
         arduino.flush()
         return arduino
 
-    def __receiveTelemetry(self):
-        # Process telemetry message from Arduino
+    def receiveTelemetry(self):
+        # Process incoming telemetry messages from Arduino, and processes the most recent message.
         # Updates self.arduinoQueueAvailableCount and other things from Arduino serial telemetry
         if (self.arduino.in_waiting > 0):
             # Each telemetry message ends in a newline.
             self.serialInBuffer += self.arduino.read(self.arduino.in_waiting).decode()
-            message = ""
+        
+        message = ""
 
-            # Loop through until we hit a newline or end of buffer
-            for i in range(len(self.serialInBuffer)):
-                if (self.serialInBuffer[i] == '\n'):
-                    # Process message
-                    message = self.serialInBuffer[:i]
-                    self.serialInBuffer = self.serialInBuffer[i+1:]
-                    self.__processTelemetry(message)
-                    break
+        # Loop through until we hit a newline or end of buffer
+        continueReading = True
+        charCounter = 0
+        while (continueReading):
+            if (charCounter >= len(self.serialInBuffer)):
+                # End of buffer
+                continueReading = False
+
+            elif (self.serialInBuffer[charCounter] == '\n'):
+                # Process message
+                message = self.serialInBuffer[:charCounter].lstrip('\r\n').rstrip('\r\n')
+                self.serialInBuffer = self.serialInBuffer[charCounter+1:]
+                charCounter = 0
             
-            if (message != ""):
-                if len(message) >= 5 and message[:5] == "ERROR":
-                    print("Arduino error: " + message)
-                else:
-                    # Message format is:
-                    # <Xpos>,<Ypos>,<queueCount>,<queueAvailableCount>,<currentCommand>
-                    # Example: "100,200,3,5,DPX1000Y0"
-                    splitMessage = message.split(',')
-                    self.arduinoQueueCount = int(splitMessage[2])
-                    self.arduinoQueueAvailableCount = int(splitMessage[3])
+            
+            
+            charCounter += 1
+        
+        if (message != ""):
+            if len(message) >= 5 and "ERROR" in message:
+                print("Arduino error: " + message)
+            else:
+                # Message format is:
+                # <Xpos>,<Ypos>,<queueCount>,<queueAvailableCount>,<currentCommand>\n
+                # Example: "100,200,3,5,DPX1000Y0"
+                splitMessage = message.split(',')
+
+                if(len(splitMessage) != 5):
+                    print("Invalid telemetry message: " + message)
+                    return
+                
+                self.arduinoQueueCount = int(splitMessage[2])
+                self.arduinoQueueAvailableCount = int(splitMessage[3])
+            
+            print("Received telemetry: " + message) # Debugging
+
     
-    def __sendNextCommandIfAvailable(self):
+    def sendNextCommandIfAvailable(self):
         # Sends next command to the Arduino if it's ready
-        self.__receiveTelemetry()
+        self.receiveTelemetry()
 
         if (len(self.commandQueue) > 0 and self.arduinoQueueAvailableCount > 0):
-            command = self.__dequeueCommand()
+            command = self.dequeueCommand()
+            command = '#' + command # start character
             print("Sending command: " + command)
             self.arduino.write(command.encode())
 
@@ -284,8 +313,8 @@ class PhysicalBoard:
 
     def update(self):
         # Updates telemetry and sends next command if available
-        self.__receiveTelemetry()
-        self.__sendNextCommandIfAvailable()
+        self.receiveTelemetry()
+        self.sendNextCommandIfAvailable()
 
     def totalQueueCount(self):
         # How many commands must be executed until we are done (does not include current command in progress)
@@ -294,9 +323,9 @@ class PhysicalBoard:
     def __movePiece(self, start, end, direct=False, useMagnetWithDirect=True):
         notAtStart = PhysicalBoard.getFileRankCoords(start) != self.finalDestinationFileRank
 
-        commands = PhysicalBoard.__getCommands(start, end, direct=direct, includeStart=notAtStart, useMagnetWithDirect=useMagnetWithDirect)
+        commands = PhysicalBoard.getCommands(start, end, direct=direct, includeStart=notAtStart, useMagnetWithDirect=useMagnetWithDirect)
         self.finalDestinationFileRank = PhysicalBoard.getFileRankCoords(end)
-        self.__queueCommands(commands)
+        self.enqueueCommands(commands)
 
     def movePiece(self, start, end, direct=False):
         self.__movePiece(start, end, direct=direct, useMagnetWithDirect=True)
@@ -309,7 +338,7 @@ class PhysicalBoard:
         pass
 
     def getModifiedReedSwitches(self):
-        # Compare current state to state from last check to see what the human changed.
+        # Compare current state to state from last check to see what the user changed.
         self.updateReedSwitches()
         modifiedReedSwitches = {}
         for square in ALL_SQUARES:
