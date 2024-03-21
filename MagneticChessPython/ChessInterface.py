@@ -5,42 +5,46 @@ Interface between the user, stockfish, and the PhysicalBoard class.
 
 
 COORDINATE SYSTEM
-    - Bank1    Main Board     Bank2
-    - _____ _________________ _____
-    8 |_|_| |_|_|_|_|_|_|_|_| |_|_| 
-    7 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-    6 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-    5 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-    4 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-y   3 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-^   2 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-|   1 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-|      w x   a b c d e f g h   y z
-|     -3-2 _ 0 1 2 3 4 5 6 7 _ 9 10 (file)
+    - Bank1Bank2   Main Board
+    - _________ _________________
+    8 |_|_|_|_| |_|_|_|_|_|_|_|_|
+    7 |_|_|_|_| |_|_|_|_|_|_|_|_|
+    6 |_|_|_|_| |_|_|_|_|_|_|_|_|
+    5 |_|_|_|_| |_|_|_|_|_|_|_|_|
+    4 |_|_|_|_| |_|_|_|_|_|_|_|_|
+y   3 |_|_|_|_| |_|_|_|_|_|_|_|_|
+^   2 |_|_|_|_| |_|_|_|_|_|_|_|_|
+|   1 |_|_|_|_| |_|_|_|_|_|_|_|_|
+|      w x y z   a b c d e f g h
+|     -5-4-3-2 _ 0 1 2 3 4 5 6 7 (file)
 +-----> x
 ^
 (0, 0)
 
 BANK PIECES
-    -   Bank1        Bank2
-    - +---+---+     +---+---+
-    8 | p | q |     | Q | P |
-    - +---+---+     +---+---+
-    7 | p | q |     | Q | P |
-    - +---+---+     +---+---+
-    6 | p | r |     | R | P |
-    - +---+---+     +---+---+
-    5 | p | r |     | R | P |
-    - +---+---+     +---+---+
-    4 | p | b |     | B | P |
-    - +---+---+     +---+---+
-    3 | p | b |     | B | P |
-    - +---+---+     +---+---+
-    2 | p | n |     | N | P |
-    - +---+---+     +---+---+
-    1 | p | n |     | N | P |
-    - +---+---+     +---+---+
-        w   x         y   z
+upper case = white, lower case = black
+p = pawn, r = rook, n = knight, b = bishop, q = queen, k = king
+    -   Bank1   Bank2
+    - +---+---+---+---+
+    8 | p | q | Q | P |
+    - +---+---+---+---+
+    7 | p | q | Q | P |
+    - +---+---+---+---+
+    6 | p | r | R | P |
+    - +---+---+---+---+
+    5 | p | r | R | P |
+    - +---+---+---+---+
+    4 | p | b | B | P |
+    - +---+---+---+---+
+    3 | p | b | B | P |
+    - +---+---+---+---+
+    2 | p | n | N | P |
+    - +---+---+---+---+
+    1 | p | n | N | P |
+    - +---+---+---+---+
+        w   x   y   z
+
+BANK FILL ORDER: Higher ranks are filled first.
 """
 
 # Imports
@@ -71,33 +75,36 @@ STOCKFISH_PATH = STOCKFISH_PATHS[current_os]
 
 # Bank piece types
 BANK_PIECE_TYPES = {
-    'w8': chess.PAWN, 'x8': chess.KNIGHT,'y8': chess.QUEEN, 'z8': chess.PAWN,
-    'w7': chess.PAWN, 'x7': chess.KNIGHT,'y7': chess.QUEEN, 'z7': chess.PAWN,
-    'w6': chess.PAWN, 'x6': chess.BISHOP,'y6': chess.ROOK,  'z6': chess.PAWN,
-    'w5': chess.PAWN, 'x5': chess.BISHOP,'y5': chess.ROOK,  'z5': chess.PAWN,
-    'w4': chess.PAWN, 'x4': chess.ROOK,  'y4': chess.BISHOP,'z4': chess.PAWN,
-    'w3': chess.PAWN, 'x3': chess.ROOK,  'y3': chess.BISHOP,'z3': chess.PAWN,
-    'w2': chess.PAWN, 'x2': chess.QUEEN, 'y2': chess.KNIGHT,'z2': chess.PAWN,
-    'w1': chess.PAWN, 'x1': chess.QUEEN, 'y1': chess.KNIGHT,'z1': chess.PAWN
+    'w8': chess.PAWN, 'x8': chess.QUEEN,  'y8': chess.QUEEN,  'z8': chess.PAWN,
+    'w7': chess.PAWN, 'x7': chess.QUEEN,  'y7': chess.QUEEN,  'z7': chess.PAWN,
+    'w6': chess.PAWN, 'x6': chess.ROOK,   'y6': chess.ROOK,   'z6': chess.PAWN,
+    'w5': chess.PAWN, 'x5': chess.ROOK,   'y5': chess.ROOK,   'z5': chess.PAWN,
+    'w4': chess.PAWN, 'x4': chess.BISHOP, 'y4': chess.BISHOP, 'z4': chess.PAWN,
+    'w3': chess.PAWN, 'x3': chess.BISHOP, 'y3': chess.BISHOP, 'z3': chess.PAWN,
+    'w2': chess.PAWN, 'x2': chess.KNIGHT, 'y2': chess.KNIGHT, 'z2': chess.PAWN,
+    'w1': chess.PAWN, 'x1': chess.KNIGHT, 'y1': chess.KNIGHT, 'z1': chess.PAWN
 }
 
 # Bank fill order
 bankFillOrder = {
     chess.WHITE: {
-        chess.PAWN: ['z8', 'z7', 'z6', 'z5', 'z4', 'z3', 'z2', 'z1'],
+        chess.PAWN: ['w8', 'w7', 'w6', 'w5', 'w4', 'w3', 'w2', 'w1'],
+        chess.ROOK: ['x6', 'x5'],
+        chess.KNIGHT: ['x2', 'x1'],
+        chess.BISHOP: ['z6', 'z5'],
         chess.QUEEN: ['y8', 'y7'],
-        chess.ROOK: ['y6', 'y5'],
-        chess.BISHOP: ['y4', 'y3'],
-        chess.KNIGHT: ['y2', 'y1']
+        chess.KING: ['z8', 'z7']
     },
     chess.BLACK: {
-        chess.PAWN: ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7', 'w8'],
+        chess.PAWN: ['z1', 'z2', 'z3', 'z4', 'z5', 'z6', 'z7', 'z8'],
+        chess.ROOK: ['y5', 'y6'],
+        chess.KNIGHT: ['y1', 'y2'],
+        chess.BISHOP: ['w5', 'w6'],
         chess.QUEEN: ['x1', 'x2'],
-        chess.ROOK: ['x3', 'x4'],
-        chess.BISHOP: ['x5', 'x6'],
-        chess.KNIGHT: ['x7', 'x8']
+        chess.KING: ['w1', 'w2']
     }
 }
+
 filledBankSquares = {} # Keep track of which bank squares are filled
 for file in ALL_FILES:
     for rank in RANKS:
@@ -128,6 +135,72 @@ class ChessInterface:
         self.physicalMoveStack = []
         self.reedSwitchStateChanges = []
     
+    def __allFileRankSquaresAtTaxicabDistance(self, startFileRank, distance):
+        # Get all (existing) squares at a given taxicab distance from a given square. Distance must be greater than 0.
+        """
+        VISUAL EXAMPLE: All squares of distance 2 from start O inside board dimensions. (board smaller for simplicity)
+           6 [ ] [ ] [ ] [*] [ ]
+           5 [ ] [ ] [*] [ ] [*]
+           4 [ ] [*] [ ] [O] [ ]
+         ^ 3 [ ] [ ] [*] [ ] [*]
+         | 2 [ ] [ ] [ ] [*] [ ]
+         | 1 [ ] [ ] [ ] [ ] [ ]
+         |    0   1   2   3   4
+        rank   file----->
+
+        """
+        if (PhysicalBoard.checkInBounds(startFileRank, printErrors=True) == False):
+            return []
+        if (distance <= 0):
+            print("Distance must be greater than 0.")
+            return []
+        
+        (originFile, originRank) = startFileRank
+        right = (originFile + distance, originRank)
+        left = (originFile - distance, originRank)
+        up = (originFile, originRank + distance)
+        down = (originFile, originRank - distance)
+
+        fileRankSquares = []
+        # Left square to up square
+        fileRank = left
+        while (fileRank != up):
+            if PhysicalBoard.checkInBounds(fileRank, printErrors=False): # Out of bounds is fine here, we just don't return it
+                fileRankSquares.append(fileRank)
+            fileRank = (fileRank[0] + 1, fileRank[1] + 1) # Move up and to the right until we reach the up square
+        
+        # Up square to right square
+        while (fileRank != right):
+            if PhysicalBoard.checkInBounds(fileRank, printErrors=False):
+                fileRankSquares.append(fileRank)
+            fileRank = (fileRank[0] + 1, fileRank[1] - 1) # Move down and to the right until we reach the right square
+        
+        # Right square to down square
+        while (fileRank != down):
+            if PhysicalBoard.checkInBounds(fileRank, printErrors=False):
+                fileRankSquares.append(fileRank)
+            fileRank = (fileRank[0] - 1, fileRank[1] - 1) # Move down and to the left until we reach the down square
+        
+        # Down square to left square
+        while (fileRank != left):
+            if PhysicalBoard.checkInBounds(fileRank, printErrors=False):
+                fileRankSquares.append(fileRank)
+            fileRank = (fileRank[0] - 1, fileRank[1] + 1) # Move up and to the left until we reach the left square
+        
+        return fileRankSquares
+
+    def __allSquaresSortedByTaxicabDistance(self, startSquare):
+        # Yields a list of all squares ('a1') sorted by taxicab distance from the start square
+        
+        distance = 1
+        while (distance <= 18): # All squares are within 18 squares (taxicab distance) of every other square, so that's our hard cap on distance
+            fileRankSquares = self.__allFileRankSquaresAtTaxicabDistance(startSquare, distance)
+            if (len(fileRankSquares) == 0): # No squares at this distance, so we're done. No configuration will lead to more squares at a greater distance.
+                break
+            for fileRank in fileRankSquares:
+                yield PhysicalBoard.getSquareFromFileRank(fileRank)
+            distance += 1
+
     def __getEmptyBankSquare(self, color, type):
         # Loop through the bank fill order to find the first empty square of the given type
         for square in bankFillOrder[color][type]:
@@ -165,11 +238,12 @@ class ChessInterface:
         self.board.pop()
         
         # Undo the last move on the physical board
-        self.stackLengthAfterMove.pop()
-        newLength = self.stackLengthAfterMove[-1]
+        self.stackLengthAfterMove.pop() # Remove last item without looking at it (unneeded)
+        newLength = self.stackLengthAfterMove[-1] if len(self.stackLengthAfterMove) > 0 else 0 # Get the length of the stack after the move
 
-        while (len(self.physicalMoveStack) > newLength): # Remove physical moves until our stack length is correct
-            self.__undoPhysical(self.physicalMoveStack[-1], sendCommand=sendCommands)
+        # Remove physical moves until our stack length is correct
+        while (len(self.physicalMoveStack) > newLength):
+            self.__undoPhysical(sendCommand=sendCommands)
 
     def move(self, move, checkLegal=True, sendCommands=True):
         if (checkLegal and move not in self.board.legal_moves):
@@ -187,7 +261,7 @@ class ChessInterface:
         physicalMoves = []
 
         # Handle castling
-        if (chess.Board.is_castling(move)):
+        if (self.board.is_castling(move=move)):
             # Move the king first, directly
             physicalMoves.append((start + end, True))
             # Move the rook
@@ -200,7 +274,7 @@ class ChessInterface:
             elif (end == "g8"):
                 physicalMoves.append(("h8f8", False))
         
-        elif (chess.Board.is_en_passant(move)):
+        elif (self.board.is_en_passant(move=move)):
             capturedSquare = end[0] + start[1] # Get opponent's pawn's position, which should be on the new file but the same rank.
             bankSquare = self.__getEmptyBankSquare(opponent, chess.PAWN)
 
@@ -224,7 +298,7 @@ class ChessInterface:
             physicalMoves.append((start + end, pieceType != chess.KNIGHT))
 
         # Move the piece on the virtual board
-        self.board.push(chess.Move.from_uci(move))
+        self.board.push(move)
 
         # Move the piece on the physical board
         for physicalMove in physicalMoves:
@@ -453,7 +527,7 @@ class ChessInterface:
 
     def update(self):
         # Update physical board
-        self.board.update()      
+        self.physicalBoard.update()      
         self.updatePhysicalMoveInProgress()
 
         move = self.getMoveFromReedSwitches() # TODO: Don't do this if no reed switches have changed

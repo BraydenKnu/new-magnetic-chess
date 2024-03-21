@@ -1,63 +1,77 @@
 
-#define PIN_EN 2
-#define PIN_STEP_A 3
-#define PIN_DIR_A 4
-#define PIN_STEP_B 5
+// Stepper drivers
+#define PIN_EN_A 2
+#define PIN_DIR_A 3
+#define PIN_STEP_A 4
+#define PIN_EN_B 5
 #define PIN_DIR_B 6
-#define PIN_BUTTON 8
-#define PIN_12V_SENSE A1
+#define PIN_STEP_B 7
+
+// Multiplexed reed switches
+// TODO: USE ACTUAL PINS
+#define PIN_MUX_SIG 8
+#define PIN_MUX_RANK_S0 A1
+#define PIN_MUX_RANK_S1 A2
+#define PIN_MUX_RANK_S2 A3
+#define PIN_MUX_FILE_S0 A4
+#define PIN_MUX_FILE_S1 A5
+#define PIN_MUX_FILE_S2 A6
+#define PIN_MUX_FILE_S3 A7
+
+// Limit switches
+#define PIN_LIM_X 9
+#define PIN_LIM_Y 10
+
+// Electromagnet
+#define PIN_MAGNET 11
+
+#define SERIAL_BAUD_RATE 115200
 
 // Incoming command queue
-#define QUEUE_SIZE 10
-#define COMMAND_LEN 16 // Length of command in chars
+#define QUEUE_SIZE 1
+#define COMMAND_LEN 12 // Length of command in chars
 int front = 0;
 int back = 0;
 int count = 0;
 unsigned char commandQueue[QUEUE_SIZE][COMMAND_LEN] = {
-  "DPX000000Y000000",
-  "DPX000000Y000000",
-  "DPX000000Y000000",
-  "DPX000000Y000000",
-  "DPX000000Y000000",
-  "DPX000000Y000000",
-  "DPX000000Y000000",
-  "DPX000000Y000000",
-  "DPX000000Y000000",
-  "DPX000000Y000000",
+  "DPX0000Y0000",
 };
 
 // Timers
 long currentTime = 0;
-long motorATimer = 0;
-long motorBTimer = 0;
+long currentTimeMicros = 0;
+long motorTimer = 0;
 long telemetryTimer = 0;
 long executionTimer = 0;
 
 // Timer intervals
-int motorAInterval = 10;
-int motorBInterval = 10;
+int motorIntervalMicros = 800;
 int telemetryInterval = 500;
 int executionInterval = 50;
 
-// TODO: Measure board size in steps.
-const long maxX = 999999;
-const long maxY = 999999;
+const long maxX = 1860;
+const long maxY = 2630;
 
-const int optimizeDistanceThreshold; // How close we need to be (euclidian distance) to the target position to start executing the next command.
+const int optimizeDistanceThreshold = 0; // How close we need to be (euclidian distance) to the target position to start executing the next command.
 
 long motorPosA = 0;
 long motorPosB = 0;
-bool motorDirA = 0;
-bool motorDirB = 0;
 long targetPosA = 0;
 long targetPosB = 0;
 long targetDistanceA = 0;
 long targetDistanceB = 0;
 long targetDistanceEuclidian = 0;
-bool isHomed = false;
+bool motorDirA = true;
+bool motorDirB = true;
 bool motorsEnabled = false;
 bool magnetUp = false;
 bool optimizeRoute = false;
+bool tempAStep = false;
+bool tempBStep = false;
+bool readyToExecute = false;
+bool hasIdlePosition = false;
+long idleA;
+long idleB;
 
 long hypA;
 long hypB;
@@ -79,13 +93,20 @@ long fastHypotenuse(long a, long b) {
   return hypB + (0.428 * hypA * hypA) / hypB;   // max error ≈ 1.04 %
 }
 
+static long pow10[10] = {
+  1,
+  10,
+  100,
+  1000,
+  10000,
+  100000,
+  1000000,
+  10000000,
+  100000000,
+  1000000000
+};
 long quick_pow10(long n)
 {
-    static long pow10[10] = {
-        1, 10, 100, 1000, 10000, 
-        100000, 1000000, 10000000, 100000000, 1000000000
-    };
-
     return pow10[n]; 
 }
 
@@ -125,11 +146,11 @@ void enqueueCommandFromSerial() {
     commandQueue[back][i] = in;
   }
   
-  Serial.print("Received command: ");
-  for (int i = 0; i < COMMAND_LEN; i++) {
-    Serial.write(commandQueue[back][i]);
-  }
-  Serial.println();
+  //Serial.print("Received command: ");
+  //for (int i = 0; i < COMMAND_LEN; i++) {
+  //  Serial.write(commandQueue[back][i]);
+  //}
+  //Serial.println();
   
   count++; // Update count
   back = newBack; // Update the back pointer
@@ -153,21 +174,21 @@ void dequeueCommand() {
 }
 
 void sendTelemetry() {
-  // Available queue slots
-  Serial.print((-motorPosA - motorPosB)/2); // X pos
-  Serial.print(",");
-  Serial.print((-motorPosA + motorPosB)/2); // Y pos
-  Serial.print(",");
+  //Serial.print((-motorPosA - motorPosB)/2); // X pos
+  //Serial.print(",");
+  //Serial.print((-motorPosA + motorPosB)/2); // Y pos
+  //Serial.print(",");
   Serial.print(count); // queued command count (not including currently executing)
   Serial.print(",");
   Serial.print(QUEUE_SIZE - count); // Available slots in queue
   Serial.print(",");
-  Serial.print(magnetUp ? 'U' : 'D'); // Current status (command format without leading zeros)
-  Serial.print(optimizeRoute ? 'O' : 'P');
-  Serial.print("X");
-  Serial.print((-targetPosA - targetPosB)/2);
-  Serial.print("Y");
-  Serial.print((-targetPosA + targetPosB)/2);
+  // TODO: Reed switches
+  //Serial.print(magnetUp ? 'U' : 'D'); // Current status (command format without leading zeros)
+  //Serial.print(optimizeRoute ? 'O' : 'P');
+  //Serial.print("X");
+  //Serial.print((-targetPosA - targetPosB)/2);
+  //Serial.print("Y");
+  //Serial.print((-targetPosA + targetPosB)/2);
   Serial.println();
 }
 
@@ -205,8 +226,8 @@ void executeNextCommand() {
     return;
   }
   
-  long newTargetX = getDigitsFromNextCommand(3,  6);
-  long newTargetY = getDigitsFromNextCommand(10, 6);
+  long newTargetX = getDigitsFromNextCommand(3,  4);
+  long newTargetY = getDigitsFromNextCommand(8, 4);
 
   // Check whether this command is valid
   if (!isInPlane(newTargetX, newTargetY)) {
@@ -219,6 +240,7 @@ void executeNextCommand() {
     Serial.print(", ");
     Serial.print(maxY);
     Serial.println("). Command ignored.");
+    dequeueCommand(); // Remove the illegal command from the queue.
     return;
   }
 
@@ -241,103 +263,169 @@ bool isInPlane(long x, long y) {
   return (x >= 0) && (x <= maxX) && (y >= 0) && (y <= maxY);
 }
 
-void step(bool motorA, bool motorB, bool dirA, bool dirB) {
+void step(bool motorA, bool motorB, bool dirA, bool dirB, bool updateTargets) {
   // Ensure directions are correct
   if (motorA && (dirA != motorDirA)) {
     motorDirA = dirA;
-    digitalWrite(PIN_DIR_A, (dirA ? HIGH : LOW));
+    digitalWrite(PIN_DIR_A, (dirA ? LOW : HIGH));
   }
   if (motorB && (dirB != motorDirB)) {
     motorDirB = dirB;
-    digitalWrite(PIN_DIR_B, (dirB ? HIGH : LOW));
+    digitalWrite(PIN_DIR_B, (dirB ? LOW : HIGH));
   }
   
   if (motorA) {
     digitalWrite(PIN_STEP_A, HIGH);
     motorPosA += (dirA ? 1 : -1);
+    if (updateTargets) {
+      targetDistanceA -= (dirA ? 1 : -1);
+    }
   }
   if (motorB) {
     digitalWrite(PIN_STEP_B, HIGH);
     motorPosB += (dirB ? 1 : -1);
+    if (updateTargets) {
+      targetDistanceB -= (dirA ? 1 : -1);
+    }
   }
   
-  delay(1); // Arbitrarily chosen step pulse length, increase if controllers ignore it.
+  delayMicroseconds(400);
   
   digitalWrite(PIN_STEP_A, LOW);
   digitalWrite(PIN_STEP_B, LOW);
 }
 
-bool home() {
-  // TODO: Implement homing function
+void abortMission() {
+  // Disable motors
+  digitalWrite(PIN_EN_A, HIGH);
+  digitalWrite(PIN_EN_B, HIGH);
+
+  // Disable magnet
+  digitalWrite(PIN_MAGNET, LOW);
+
+  // Notify user
+  Serial.println("Disabled motors, magnet, and suspended all Arduino processes.");
+  
+  while (true) {} // Get stuck in an infinite loop intentionally
+}
+
+long tempCount;
+void home() {
+  // Move in -x direction until we hit the switch or go for maxX steps
+  tempCount = 0;
+  while (tempCount < maxX) {
+    if (digitalRead(PIN_LIM_X) == LOW) { // Hit the limit switch
+      break;
+    }
+    else {
+      step(true, true, true, true, false); // Step in -x direction
+      delayMicroseconds(motorIntervalMicros);
+    }
+    tempCount++;
+  }
+
+  // Error handling
+  if (tempCount >= maxX) { // Uh oh, we moved the full width of the board and didn't hit the X limit switch
+    Serial.print("ERROR Fatal: Home sequence did not contact X-axis limit switch.");
+    abortMission();
+  }
+
+  // Move in -y direction until we hit the switch or go for maxY steps
+  tempCount = 0;
+  while (tempCount < maxY) {
+    if (digitalRead(PIN_LIM_Y) == LOW) { // Hit the limit switch
+      break;
+    }
+    else {
+      step(true, true, true, false, false); // Step in -y direction
+      delayMicroseconds(motorIntervalMicros);
+    }
+    tempCount++;
+  }
+
+  // Error handling
+  if (tempCount >= maxY) { // Uh oh, we moved the full width of the board and didn't hit the X limit switch
+    Serial.print("ERROR Fatal: Home sequence did not contact Y-axis limit switch.");
+    abortMission();
+  }
+
+  // Reset values
   motorPosA = 0;
   motorPosB = 0;
   targetPosA = 0;
   targetPosB = 0;
-  
-  return true;
 }
 
 void setup() {
   
   // put your setup code here, to run once:
-  Serial.begin(9600);
-  
-  pinMode(PIN_STEP_A, OUTPUT);
-  pinMode(PIN_DIR_A, OUTPUT);
-  pinMode(PIN_STEP_B, OUTPUT);
-  pinMode(PIN_DIR_B, OUTPUT);
-  pinMode(PIN_BUTTON, INPUT_PULLUP);
-  pinMode(PIN_12V_SENSE, INPUT);
-  pinMode(PIN_EN, OUTPUT);
+  Serial.begin(SERIAL_BAUD_RATE);
 
-  digitalWrite(PIN_EN, HIGH); // Ensure motors are off
-  motorsEnabled = false;
+  pinMode(PIN_EN_A, OUTPUT);
+  pinMode(PIN_DIR_A, OUTPUT);
+  pinMode(PIN_STEP_A, OUTPUT);
+  pinMode(PIN_EN_B, OUTPUT);
+  pinMode(PIN_DIR_B, OUTPUT);
+  pinMode(PIN_STEP_B, OUTPUT);
   
-  home();
+  pinMode(PIN_MUX_SIG, INPUT);
+
+  pinMode(PIN_MUX_RANK_S0, OUTPUT);
+  pinMode(PIN_MUX_RANK_S1, OUTPUT);
+  pinMode(PIN_MUX_RANK_S2, OUTPUT);
+  pinMode(PIN_MUX_FILE_S0, OUTPUT);
+  pinMode(PIN_MUX_FILE_S1, OUTPUT);
+  pinMode(PIN_MUX_FILE_S2, OUTPUT);
+  pinMode(PIN_MUX_FILE_S3, OUTPUT);
+
+  pinMode(PIN_LIM_X, INPUT_PULLUP);
+  pinMode(PIN_LIM_Y, INPUT_PULLUP);
+  
+  pinMode(PIN_MAGNET, OUTPUT);
+  
+
+  digitalWrite(PIN_EN_A, HIGH); // Ensure motors are off
+  digitalWrite(PIN_EN_B, HIGH);
+  motorsEnabled = false;
+
+  digitalWrite(PIN_MAGNET, LOW); // Ensure magnet is off
+  magnetUp = false;
+  
+  // TODO: Uncomment this usage when limit switches are installed
+  //home();
 
   currentTime = millis();
-  motorATimer = currentTime;
-  motorBTimer = currentTime;
+  currentTimeMicros = micros();
+  motorTimer = currentTimeMicros;
   telemetryTimer = currentTime;
   executionTimer = currentTime;
 }
 
-bool readyToExecute;
 void loop() {
   currentTime = millis();
-
-  if (currentTime >= motorATimer) {
+  currentTimeMicros = micros();
+  
+  if (currentTimeMicros >= motorTimer) {
     targetDistanceA = targetPosA - motorPosA;
-    
-    if (targetDistanceA < 0) {
-      step(true, false, false, false);
-      targetDistanceA++;
-    } else if (targetDistanceA > 0) {
-      step(true, false, true, false);
-      targetDistanceA--;
-    }
-
-    motorATimer += motorAInterval;
-  }
-
-  else if (currentTime >= motorBTimer) {
     targetDistanceB = targetPosB - motorPosB;
-    
-    if (targetDistanceB < 0) {
-      step(false, true, false, false);
-      targetDistanceB++;
-    } else if (targetDistanceB > 0) {
-      step(false, true, false, true);
-      targetDistanceB--;
-    }
+    tempAStep = (targetDistanceA != 0);
+    tempBStep = (targetDistanceB != 0);
 
-    motorBTimer += motorBInterval;
+    if (tempAStep or tempBStep) {
+      step(tempAStep, tempBStep, targetDistanceA > 0, targetDistanceB > 0, true);
+    } else if (count > 0) { // We're finished and there's another command, flag for execution immediately
+      executionTimer = millis();
+    }
+    
+    motorTimer += motorIntervalMicros;
   }
 
   else if (currentTime >= executionTimer) {
+    // TODO: Implement idle position
     if (count > 0) {
       if (!motorsEnabled) {
-        digitalWrite(PIN_EN, LOW); // Enable motors
+        digitalWrite(PIN_EN_A, LOW); // Enable motors
+        digitalWrite(PIN_EN_B, LOW);
         motorsEnabled = true;
       }
       
@@ -354,9 +442,10 @@ void loop() {
       }
     } else { // No commands, idle state
       if (motorsEnabled && targetDistanceA == 0 && targetDistanceB == 0) {
-        digitalWrite(PIN_EN, HIGH);
+        digitalWrite(PIN_EN_A, HIGH);
+        digitalWrite(PIN_EN_B, HIGH);
+        digitalWrite(PIN_MAGNET, LOW);
         motorsEnabled = false;
-        // TODO: actually turn off magnet
         magnetUp = false;
       }
     }

@@ -5,21 +5,19 @@ Controls the motors and the piece magnet by sending commands to the Arduino.
 
 
 COORDINATE SYSTEM
-      Bank1    Main Board     Bank2
-      _____ _________________ _____
-    8 |_|_| |_|_|_|_|_|_|_|_| |_|_| 
-    7 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-    6 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-    5 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-    4 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-y   3 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-^   2 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-|   1 |_|_| |_|_|_|_|_|_|_|_| |_|_|
-|      w x   a b c d e f g h   y z
-|     -3-2 _ 0 1 2 3 4 5 6 7 _ 9 10 (file)
-+-----> x
-^
-(0, 0)
+    - Bank1Bank2   Main Board
+    - _________ _________________
+    8 |_|_|_|_| |_|_|_|_|_|_|_|_|
+    7 |_|_|_|_| |_|_|_|_|_|_|_|_|
+    6 |_|_|_|_| |_|_|_|_|_|_|_|_|
+    5 |_|_|_|_| |_|_|_|_|_|_|_|_|
+    4 |_|_|_|_| |_|_|_|_|_|_|_|_|
+    3 |_|_|_|_| |_|_|_|_|_|_|_|_|
+    2 |_|_|_|_| |_|_|_|_|_|_|_|_| x
+    1 |_|_|_|_| |_|_|_|_|_|_|_|_| ^
+       w x y z   a b c d e f g h  |
+(file)-5-4-3-2 _ 0 1 2 3 4 5 6 7  |
+                          y<------+ (0, 0)
 
 EXTENDED MOVE NOTATION
 The board is extended to 12x8 to allow for the movement of the pieces to the banks.
@@ -30,10 +28,16 @@ To support moving pieces to the corners of each square, rank/file coordinates ha
 to numeirc values, stored as (file, rank) tuples. A1 is at (0, 1).
 """
 
+LINUX = 1 # Linux OS
+WINDOWS = 2 # Windows OS
+
 # Imports
-import RPi.GPIO as GPIO
-import serial
+import os
+current_os = WINDOWS if (os.name == 'nt') else LINUX # Detect whether we're on Windows or Linux
 import time
+if (current_os == LINUX):
+    import serial
+
 
 # Constants
 RANKS = "12345678"
@@ -44,11 +48,17 @@ FILES_BANKS = FILES_BANK1 + FILES_BANK2
 ALL_FILES = FILES_STANDARD + FILES_BANKS
 ALL_SQUARES = [file + rank for file in ALL_FILES for rank in RANKS]
 
-CALIBRATION_A1_CENTER_X = 500
-CALIBRATION_A1_CETNER_Y = 500
-SQUARE_SIZE = 100
+BOTTOM_RIGHT_CORNER_X = 100
+BOTTOM_RIGHT_CORNER_Y = 100
+SQUARE_SIZE = 150
 
-SERIAL_BAUD = 9600
+SERIAL_BAUD = 115200
+USB_INTERFACES = [
+    '/dev/ttyUSB0',
+    '/dev/ttyUSB1',
+    '/dev/ttyUSB2',
+    '/dev/ttyUSB3'
+]
 
 class PhysicalBoard:
     def __init__(self):
@@ -62,7 +72,11 @@ class PhysicalBoard:
         for fileRank in ALL_SQUARES:
             self.__prevCheckReedSwitches[fileRank] = False
             self.reedSwitches[fileRank] = False
-        self.arduino = self.beginSerial()
+        
+        if (current_os == LINUX):
+            self.arduino = self.beginSerial()
+        else:
+            self.arduino = None
 
     @staticmethod
     def getFileRankCoords(square):
@@ -77,20 +91,64 @@ class PhysicalBoard:
         if (square[0] in FILES_STANDARD):
             file = FILES_STANDARD.index(square[0])
         elif (square[0] in FILES_BANK1):
-            file = -3 + FILES_BANK1.index(square[0])
+            file = -5 + FILES_BANK1.index(square[0])
         elif (square[0] in FILES_BANK2):
-            file = 9 + FILES_BANK2.index(square[0])
+            file = -3 + FILES_BANK2.index(square[0])
+        else:
+            print("Invalid file '" + square[0] + "'")
         
         # Rank
+        # Ensure numeric
+        if (not square[1].isdigit()):
+            print("Invalid rank '" + square[1] + "'")
         rank = int(square[1])
 
+        fileRank = (file, rank)
         # More error checking
-        if (file not in [-3, -2, 0, 1, 2, 3, 4, 5, 6, 7, 9, 10]):
-            print("Invalid file '" + square[0] + "'")
-        if (rank not in [1, 2, 3, 4, 5, 6, 7, 8]):
-            print("Invalid rank '" + square[1] + "'")
+        if (not PhysicalBoard.checkInBounds(fileRank, printErrors=True)):
+            print("Invalid square '" + square + "'")
 
-        return (file, rank)
+        return fileRank
+
+    @staticmethod
+    def checkInBounds(fileRank, printErrors=False):
+        # Ensures file and rank are inside the bounds of our board.
+        (file, rank) = fileRank
+        
+        # Make sure file and rank are ints
+        if (not isinstance(file, int) or not isinstance(rank, int)):
+            if printErrors:
+                print("Invalid file or rank '" + str(file) + "', '" + str(rank) + "'")
+            return False
+        if not (-5 <= file <= -2 or 0 <= file <= 7):
+            if printErrors:
+                print("Invalid file '" + str(file) + "'")
+            return False
+        if not (1 <= rank <= 8):
+            if printErrors:
+                print("Invalid rank '" + rank + "'")
+            return False
+        return True
+
+    @staticmethod
+    def getSquareFromFileRank(fileRank):
+        (file, rank) = fileRank
+        if (not PhysicalBoard.checkInBounds((file, rank), printErrors=True)):
+            print("Invalid file/rank '" + str(file) + "', '" + str(rank) + "'")
+            return None
+        
+        square = ''
+        
+        if (file >= 0):
+            square += FILES_STANDARD[file]
+        elif (-5 <= file <= -4):
+            square += FILES_BANK1[file + 5]
+        elif (-3 <= file <= -2):
+            square += FILES_BANK2[file + 3]
+        
+        square += str(rank)
+        
+        return square
 
     @staticmethod
     def getXY(square): # Takes input like 'f2' or 'w6' and returns xy coordinates
@@ -100,9 +158,9 @@ class PhysicalBoard:
     @staticmethod
     def getXYFromFileRank(fileRankCoords):
         (file, rank) = fileRankCoords
-        x = CALIBRATION_A1_CENTER_X + file * SQUARE_SIZE
-        y = CALIBRATION_A1_CETNER_Y + rank * SQUARE_SIZE
-        return (x, y)
+        x = BOTTOM_RIGHT_CORNER_X + (rank - 1 + 0.5) * SQUARE_SIZE
+        y = BOTTOM_RIGHT_CORNER_Y + (-file + 7 + 0.5) * SQUARE_SIZE
+        return (int(x), int(y))
 
     @staticmethod
     def getPath(start, end, direct=False, includeStart=True):
@@ -191,13 +249,13 @@ class PhysicalBoard:
     def buildCommand(x, y, magnetUp, optimizeRoute):
         x = int(x)
         y = int(y)
-        if x < 0 or x > 999999 or y < 0 or y > 999999:
-            print("Command to move to X: " + str(x) + ", Y: " + str(y) + " out of command size (positive, max 6 digits).")
+        if x < 0 or x > 9999 or y < 0 or y > 9999:
+            print("Command to move to X: " + str(x) + ", Y: " + str(y) + " out of command size (positive, max 4 digits).")
             exit()
 
         magnetChar = 'U' if magnetUp else 'D' # Up vs Down
         optimizeChar = 'O' if optimizeRoute else 'P' # Optimize vs Precise
-        splitCommand = [magnetChar, optimizeChar, 'X', str(x).zfill(6), 'Y', str(y).zfill(6)]
+        splitCommand = [magnetChar, optimizeChar, 'X', str(x).zfill(4), 'Y', str(y).zfill(4)]
         command = "".join(splitCommand)
 
         return command
@@ -239,16 +297,23 @@ class PhysicalBoard:
     def beginSerial(self):
         # Open serial connection to Arduino
         connected = False
+        trying_interface = 0
         while (not connected):
             try:
-                arduino = serial.Serial('/dev/ttyUSB0', SERIAL_BAUD, timeout=1)
+                print("Looking for Arduino on USB" + str(trying_interface) + "...")
+                arduino = serial.Serial(USB_INTERFACES[trying_interface], SERIAL_BAUD, timeout=1)
                 arduino.flush()
                 connected = True
-            except:
-                print("Error connecting to Arduino. Retrying...")
-                time.sleep(1)
+            except serial.SerialException as e:
+                print("Error connecting to Arduino (" + str(e) + "). Retrying...")
+                time.sleep(0.2)
 
-        arduino = serial.Serial('/dev/ttyUSB0', SERIAL_BAUD, timeout=1)
+                trying_interface += 1
+                if trying_interface >= len(USB_INTERFACES):
+                    trying_interface = 0
+
+
+        print("Connected to Arduino on " + USB_INTERFACES[trying_interface])
         arduino.flush()
         return arduino
 
@@ -275,8 +340,6 @@ class PhysicalBoard:
                 self.serialInBuffer = self.serialInBuffer[charCounter+1:]
                 charCounter = 0
             
-            
-            
             charCounter += 1
         
         if (message != ""):
@@ -284,16 +347,18 @@ class PhysicalBoard:
                 print("Arduino error: " + message)
             else:
                 # Message format is:
-                # <Xpos>,<Ypos>,<queueCount>,<queueAvailableCount>,<currentCommand>\n
-                # Example: "100,200,3,5,DPX1000Y0"
+                # <queueCount>,<queueAvailableCount>\n
+                # Example: "3,5"
                 splitMessage = message.split(',')
 
-                if(len(splitMessage) != 5):
+                """
+                if(len(splitMessage) != 2):
                     print("Invalid telemetry message: " + message)
                     return
+                """
                 
-                self.arduinoQueueCount = int(splitMessage[2])
-                self.arduinoQueueAvailableCount = int(splitMessage[3])
+                self.arduinoQueueCount = int(splitMessage[0])
+                self.arduinoQueueAvailableCount = int(splitMessage[1])
             
             print("Received telemetry: " + message) # Debugging
 
@@ -347,4 +412,22 @@ class PhysicalBoard:
 
         return modifiedReedSwitches
     
-    
+    def debugRunRectanglesAroundBoard(self):
+        # Debugging function to run rectangles around the board, until the user stops it.
+        # Start at lower right corner of board, then lower left, then upper left, then upper right.
+
+        optimize = True
+
+        lowerRightCommand = PhysicalBoard.buildCommand(BOTTOM_RIGHT_CORNER_X, BOTTOM_RIGHT_CORNER_Y, optimizeRoute=optimize, magnetUp=False)
+        lowerLeftCommand = PhysicalBoard.buildCommand(BOTTOM_RIGHT_CORNER_X, BOTTOM_RIGHT_CORNER_Y + 13*SQUARE_SIZE, optimizeRoute=optimize, magnetUp=False)
+        upperLeftCommand = PhysicalBoard.buildCommand(BOTTOM_RIGHT_CORNER_X + 8*SQUARE_SIZE, BOTTOM_RIGHT_CORNER_Y + 13*SQUARE_SIZE, optimizeRoute=optimize, magnetUp=False)
+        upperRightCommand = PhysicalBoard.buildCommand(BOTTOM_RIGHT_CORNER_X + 8*SQUARE_SIZE, BOTTOM_RIGHT_CORNER_Y, optimizeRoute=optimize, magnetUp=False)
+
+        while True:
+            if (len(self.commandQueue) == 0):
+                self.enqueueCommand(lowerRightCommand)
+                self.enqueueCommand(lowerLeftCommand)
+                self.enqueueCommand(upperLeftCommand)
+                self.enqueueCommand(upperRightCommand)
+            self.update()
+            time.sleep(0.25)
