@@ -151,6 +151,13 @@ class PhysicalBoard:
         return square
 
     @staticmethod
+    def taxicabDistance(start, end):
+        (startFile, startRank) = PhysicalBoard.getFileRankCoords(start)
+        (endFile, endRank) = PhysicalBoard.getFileRankCoords(end)
+
+        return abs(startFile - endFile) + abs(startRank - endRank)
+
+    @staticmethod
     def getXY(square): # Takes input like 'f2' or 'w6' and returns xy coordinates
         (file, rank) = PhysicalBoard.getFileRankCoords(square)
         return PhysicalBoard.getXYFromFileRank((file, rank))

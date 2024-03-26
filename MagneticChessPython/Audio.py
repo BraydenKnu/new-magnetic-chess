@@ -11,8 +11,10 @@ from threading import Thread
 
 import time
 
-BASE_AUDIO_PATH = '/home/chess/new-magnetic-chess/audio/'
+BASE_AUDIO_PATH = '../audio/'
 BASE_TTS_PATH = BASE_AUDIO_PATH + 'TextToSpeech/'
+
+AUDIO_WPM = 150
 
 NON_TTS_AUDIO = {
     'boot': 'Windows XP Startup.wav',
@@ -25,7 +27,7 @@ MAX_CHANNELS = 8
 class Audio:
     def __init__(self):
         self.mixer = mixer
-        self.mixer.pre_init(24000) # Configure smaple rate to 24000 Hz (to make gTTS sound better)
+        #self.mixer.pre_init(24000) # Configure smaple rate to 24000 Hz (to make gTTS sound better)
         self.mixer.init()
         self.mixer.set_num_channels(MAX_CHANNELS)
 
@@ -38,12 +40,17 @@ class Audio:
         self.sounds = {}
         for key, filename in NON_TTS_AUDIO.items():
             self.sounds[key] = self.mixer.Sound(BASE_AUDIO_PATH + filename)
+    
+    def __del__(self):
+        self.engine.endLoop()
+        self.engine.stop()
+        self.mixer.quit()
 
     def __startEngine(self):
         global stop_threads
         # start engine loop in its own thread
         self.engine = tts.init()
-        self.engine.setProperty('rate', 150) # Set speed of speech in wpm
+        self.engine.setProperty('rate', AUDIO_WPM) # Set speed of speech in wpm
         self.engine.setProperty('voice', 'english-us')
         self.engine.setProperty('volume', 1.0) # Volume
         self.engine.startLoop(False)

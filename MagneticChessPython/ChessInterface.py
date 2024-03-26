@@ -26,21 +26,21 @@ upper case = white, lower case = black
 p = pawn, r = rook, n = knight, b = bishop, q = queen, k = king
     -   Bank1   Bank2
     - +---+---+---+---+
-    8 | p | q | Q | P |
+    8 | P | Q | q | p |
     - +---+---+---+---+
-    7 | p | q | Q | P |
+    7 | P | Q | q | p |
     - +---+---+---+---+
-    6 | p | r | R | P |
+    6 | P | R | r | p |
     - +---+---+---+---+
-    5 | p | r | R | P |
+    5 | P | R | r | p |
     - +---+---+---+---+
-    4 | p | b | B | P |
+    4 | P | B | b | p |
     - +---+---+---+---+
-    3 | p | b | B | P |
+    3 | P | B | b | p |
     - +---+---+---+---+
-    2 | p | n | N | P |
+    2 | P | N | n | p |
     - +---+---+---+---+
-    1 | p | n | N | P |
+    1 | P | N | n | p |
     - +---+---+---+---+
         w   x   y   z
 
@@ -52,6 +52,7 @@ import os
 from stockfish import Stockfish # (pip install stockfish) Documentation: https://pypi.org/project/stockfish/
 import chess                    # (pip install python-chess) Documentation: https://python-chess.readthedocs.io/en/latest/
 from PhysicalBoard import PhysicalBoard
+from Audio import Audio
 
 # Constants
 RANKS = "12345678"
@@ -75,34 +76,33 @@ STOCKFISH_PATH = STOCKFISH_PATHS[current_os]
 
 # Bank piece types
 BANK_PIECE_TYPES = {
-    'w8': chess.PAWN, 'x8': chess.QUEEN,  'y8': chess.QUEEN,  'z8': chess.PAWN,
-    'w7': chess.PAWN, 'x7': chess.QUEEN,  'y7': chess.QUEEN,  'z7': chess.PAWN,
-    'w6': chess.PAWN, 'x6': chess.ROOK,   'y6': chess.ROOK,   'z6': chess.PAWN,
-    'w5': chess.PAWN, 'x5': chess.ROOK,   'y5': chess.ROOK,   'z5': chess.PAWN,
-    'w4': chess.PAWN, 'x4': chess.BISHOP, 'y4': chess.BISHOP, 'z4': chess.PAWN,
-    'w3': chess.PAWN, 'x3': chess.BISHOP, 'y3': chess.BISHOP, 'z3': chess.PAWN,
-    'w2': chess.PAWN, 'x2': chess.KNIGHT, 'y2': chess.KNIGHT, 'z2': chess.PAWN,
-    'w1': chess.PAWN, 'x1': chess.KNIGHT, 'y1': chess.KNIGHT, 'z1': chess.PAWN
+    'w8': 'P',  'x8': 'Q',  'y8': 'q',  'z8': 'p',
+    'w7': 'P',  'x7': 'Q',  'y7': 'q',  'z7': 'p',
+    'w6': 'P',  'x6': 'R',  'y6': 'r',  'z6': 'p',
+    'w5': 'P',  'x5': 'R',  'y5': 'r',  'z5': 'p',
+    'w4': 'P',  'x4': 'B',  'y4': 'b',  'z4': 'p',
+    'w3': 'P',  'x3': 'B',  'y3': 'b',  'z3': 'p',
+    'w2': 'P',  'x2': 'N',  'y2': 'n',  'z2': 'p',
+    'w1': 'P',  'x1': 'N',  'y1': 'n',  'z1': 'p',
 }
 
 # Bank fill order
-bankFillOrder = {
-    chess.WHITE: {
-        chess.PAWN: ['w8', 'w7', 'w6', 'w5', 'w4', 'w3', 'w2', 'w1'],
-        chess.ROOK: ['x6', 'x5'],
-        chess.KNIGHT: ['x2', 'x1'],
-        chess.BISHOP: ['z6', 'z5'],
-        chess.QUEEN: ['y8', 'y7'],
-        chess.KING: ['z8', 'z7']
-    },
-    chess.BLACK: {
-        chess.PAWN: ['z1', 'z2', 'z3', 'z4', 'z5', 'z6', 'z7', 'z8'],
-        chess.ROOK: ['y5', 'y6'],
-        chess.KNIGHT: ['y1', 'y2'],
-        chess.BISHOP: ['w5', 'w6'],
-        chess.QUEEN: ['x1', 'x2'],
-        chess.KING: ['w1', 'w2']
-    }
+BANK_FILL_ORDER = {
+    'P': ['w8', 'w7', 'w6', 'w5', 'w4', 'w3', 'w2', 'w1'],
+    'Q': ['x8', 'x7'],
+    'R': ['x6', 'x5'],
+    'B': ['x4', 'x3'],
+    'N': ['x2', 'x1'],
+    'p': ['z8', 'z7', 'z6', 'z5', 'z4', 'z3', 'z2', 'z1'],
+    'q': ['y8', 'y7'],
+    'r': ['y6', 'y5'],
+    'b': ['w5', 'w6'],
+    'n': ['w1', 'w2']
+}
+
+NUM_PIECES = {
+    'P': 8, 'Q': 2, 'R': 2, 'B': 2, 'N': 2, 'K': 1,
+    'p': 8, 'q': 2, 'r': 2, 'b': 2, 'n': 2, 'k': 1
 }
 
 filledBankSquares = {} # Keep track of which bank squares are filled
@@ -127,13 +127,19 @@ for file in range(len(FILES_STANDARD)):
         ALL_EN_PASSANT_PHYSICAL.append((FILES_STANDARD[file+1] + '4', FILES_STANDARD[file] + '3', FILES_STANDARD[file] + '4'))
 
 class ChessInterface:
-    def __init__(self):
+    def __init__(self, enableSound=True):
         self.stockfish = Stockfish(STOCKFISH_PATH) # (pip install stockfish) Documentation: https://pypi.org/project/stockfish/
         self.board = chess.Board()
         self.physicalBoard = PhysicalBoard()
         self.stackLengthAfterMove = [] # Since moves can take multiple steps, we keep track of the final length of the stack after the move is complete 
         self.physicalMoveStack = []
         self.reedSwitchStateChanges = []
+
+        self.enableSound = enableSound
+        self.audio = None
+        if (enableSound):
+            self.audio = Audio()
+            self.audio.playSound('boot')
     
     def __allFileRankSquaresAtTaxicabDistance(self, startFileRank, distance):
         # Get all (existing) squares at a given taxicab distance from a given square. Distance must be greater than 0.
@@ -203,14 +209,16 @@ class ChessInterface:
 
     def __getEmptyBankSquare(self, color, type):
         # Loop through the bank fill order to find the first empty square of the given type
-        for square in bankFillOrder[color][type]:
+        symbol = chess.Piece(type, color).symbol()
+        for square in BANK_FILL_ORDER[symbol]:
             if (square not in filledBankSquares):
                 return square
         return None
     
     def __getFilledBankSquare(self, color, type):
         # Loop backwards through the bank fill order to find the most recently filled square of the given type
-        for square in reversed(bankFillOrder[color][type]):
+        symbol = chess.Piece(type, color).symbol()
+        for square in reversed(BANK_FILL_ORDER[symbol]):
             if (square in filledBankSquares):
                 return square
         return None
@@ -498,14 +506,14 @@ class ChessInterface:
                             if (state == True):
                                 bank = square
                         
-                        capturingPieceType = self.board.piece_type_at(chess.SQUARE_NAMES.index(start))
-                        capturedPieceType = BANK_PIECE_TYPES[bank]
+                        capturingPiece = self.board.piece_at(chess.SQUARE_NAMES.index(start)).symbol()
+                        capturedPiece = BANK_PIECE_TYPES[bank]
 
                         # Get legal captures that begin with the start square and capture the captured piece type
                         legalMoves = self.board.legal_moves
                         legalCapturesFromStart = []
                         for move in legalMoves:
-                            if (move.from_square == chess.SQUARE_NAMES.index(start) and self.board.piece_type_at(move.to_square) == capturedPieceType):
+                            if (move.from_square == chess.SQUARE_NAMES.index(start) and self.board.piece_at(move.to_square).symbol() == capturedPiece):
                                 legalCapturesFromStart.append(move)
                         
                         mostLikelyMove = None
@@ -523,7 +531,190 @@ class ChessInterface:
                         
                         if (mostLikelyMove != None):
                             physicalMoves.append((chess.square_name(mostLikelyMove.to_square) + bank, False))
-                            physicalMoves.append((start + chess.square_name(mostLikelyMove.to_square), capturingPieceType != chess.KNIGHT))
+                            physicalMoves.append((start + chess.square_name(mostLikelyMove.to_square), capturingPiece != chess.KNIGHT))
+
+    @staticmethod
+    def __getBoardPositionDict(board):
+        position = {}
+        missing_piece_counts = NUM_PIECES.copy()
+
+        for file in FILES_STANDARD:
+            for rank in RANKS:
+                piece = board.piece_at(chess.SQUARE_NAMES.index(file+rank))
+                symbol = piece.symbol() if piece != None else None
+                position[file+rank] = symbol
+                if (symbol != None):
+                    missing_piece_counts[symbol] -= 1
+        
+        for piece_symbol in BANK_FILL_ORDER:
+            if (missing_piece_counts[piece_symbol] < 0): # Check for too many pieces
+                print("Extra " + str(-missing_piece_counts[piece_symbol]) + "*" + piece_symbol + " found on the board. Cannot load position.")
+                return None
+            
+            for square in BANK_FILL_ORDER[piece_symbol]:
+                if (missing_piece_counts[piece_symbol] > 0):
+                    position[square] = piece_symbol
+                    missing_piece_counts[piece_symbol] -= 1
+                else:
+                    position[square] = None
+            
+            if (missing_piece_counts[piece_symbol] > 0): # Pieces unable to be put in bank
+                print("Board missing " + str(missing_piece_counts[piece_symbol]) + "*" + piece_symbol + " which could not be placed into bank.")
+                return None
+        
+        return position
+
+    def __physicalMovesPositionToPosition(self, oldPosition, newPosition):
+        """
+        Algorithm:
+
+        While there are unresolved start squares:
+            Find nearest unresolved start square to current square
+            Find nearest unfilled target for it
+
+            If all targets are filled:
+                Find nearest filled target to current square.
+                Move that target to the nearest empty square.
+            
+            Move the piece to the nearest unfilled target.
+            
+        """
+
+        # Convert a position of physical moves to a position of pieces
+        position = oldPosition.copy()
+        newPositionByPiece = { # For each piece, get target squares
+            'P': [], 'Q': [], 'R': [], 'B': [], 'N': [], 'K': [],
+            'p': [], 'q': [], 'r': [], 'b': [], 'n': [], 'k': []
+        }
+        for square, piece in newPosition.items():
+            if (piece != None):
+                newPositionByPiece[piece].append(square)
+        
+        unresolvedStartSquares = []
+        for square, piece in position.items():
+            if (piece != None):
+                if (square in newPositionByPiece[piece]): # Piece is in the correct square
+                    position[square] = None
+                else: # Piece is in the wrong square
+                    unresolvedStartSquares.append(square)
+        
+        # Start at the closest location to the magnet
+        currentSquare = PhysicalBoard.getSquareFromFileRank(self.board.finalDestinationFileRank)
+        physicalMoves = []
+
+        # While there are unresolved start squares:
+        while (len(unresolvedStartSquares) > 0):
+            # Find nearest unresolved start square to current square
+            nearestUnresolvedStartSquare = None
+            minDistance = 9999
+            for square in unresolvedStartSquares:
+                distance = PhysicalBoard.taxicabDistance(currentSquare, square)
+                if (nearestUnresolvedStartSquare == None or distance < minDistance):
+                    nearestUnresolvedStartSquare = square
+                    minDistance = distance
+            
+            # Error handling, make sure there is at least one target
+            if (len(newPositionByPiece[position[nearestUnresolvedStartSquare]]) == 0):
+                print("No target squares for piece " + position[nearestUnresolvedStartSquare] at square " + nearestUnresolvedStartSquare")
+                return None
+
+            # Find nearest unfilled target for piece at current square
+            nearestUnfilledTarget = None
+            nearestTarget = None
+            minDistanceToUnfilledTarget = 9999
+            minDistanceToTarget = 9999
+            for target in newPositionByPiece[position[nearestUnresolvedStartSquare]]:
+                distance = PhysicalBoard.taxicabDistance(nearestUnresolvedStartSquare, target)
+                if (nearestTarget == None or distance < minDistanceToTarget): # Any target
+                    nearestTarget = target
+                    minDistanceToTarget = distance
+                if (position[target] == None and (nearestUnfilledTarget == None or distance < minDistanceToUnfilledTarget)): # Unfilled target
+                    nearestUnfilledTarget = target
+                    minDistanceToUnfilledTarget = distance
+            
+            # If all targets are filled:
+            if (nearestUnfilledTarget == None):
+                # Use nearest filled target to current square
+                nearestFilledTarget = nearestTarget
+
+                # Move that target to the nearest empty square to it.
+                nearestEmptySquare = None
+                for square in ChessInterface.__allSquaresSortedByTaxicabDistance(nearestFilledTarget):
+                    if (position[square] == None):
+                        nearestEmptySquare = square
+                        break
+                
+                if (nearestEmptySquare == None):
+                    print("No empty squares near filled target " + nearestFilledTarget)
+                    return None
+            
+                # Move the piece to the nearest empty square to it
+                position[nearestEmptySquare] = position[nearestFilledTarget]
+                position[nearestFilledTarget] = None
+
+                # Update unresolved start squares
+                unresolvedStartSquares.remove(nearestUnresolvedStartSquare)
+                unresolvedStartSquares.append(nearestEmptySquare)
+
+                # Update nearestUnfilledTarget
+                nearestUnfilledTarget = nearestEmptySquare
+                
+                physicalMoves.append((nearestFilledTarget + nearestEmptySquare, False)) # Physical move
+            
+            # Move the piece to the nearest unfilled target
+            position[nearestUnfilledTarget] = position[nearestUnresolvedStartSquare]
+            position[nearestUnresolvedStartSquare] = None
+
+            # Update unresolved start squares
+            unresolvedStartSquares.remove(nearestUnresolvedStartSquare)
+
+            physicalMoves.append((nearestUnresolvedStartSquare + nearestUnfilledTarget, False)) # Physical move
+        
+        return physicalMoves
+        
+
+    def setBoardFEN(self, fen):
+        # Get current position from virtual board
+        currentPosition = ChessInterface.__getBoardPositionDict(self.board)
+
+        # Ensure the physical board matches the virtual board (reed switches)
+        self.physicalBoard.updateReedSwitches()
+        missingSquares = []
+        extraSquares = []
+        for square in currentPosition.keys():
+            if (currentPosition[square] == None): # No piece, reed switch should be off
+                if (self.physicalBoard.reedSwitches[square] == True):
+                    extraSquares.append(square)
+            else: # Piece, reed switch should be on
+                if (self.physicalBoard.reedSwitches[square] == False):
+                    missingSquares.append(square)
+        
+        if (len(missingSquares) > len(extraSquares)):
+            print("Board is missing pieces!")
+            return
+        
+        if (len(missingSquares) + len(extraSquares) > 0):
+            print("Board position inconsistent with reed switches.")
+            if (len(missingSquares) + len(extraSquares) > 2):
+                print("More than 2 squares are inconsistent, cannot automatically fix. Please reset to the starting position manually.")
+                return
+        
+        
+        
+        # Basic error correction for one missing and one extra square
+        if (len(missingSquares) == 1 and len(extraSquares) == 1):
+            # In our virtual position, move the piece from the extra square to the missing square
+            currentPosition[missingSquares[0]] = currentPosition[extraSquares[0]]
+            currentPosition[extraSquares[0]] = None
+
+        self.board.set_fen(fen) # Set the virtual board position
+        
+        newPosition = ChessInterface.__getBoardPositionDict(self.board)
+        physicalMoves = ChessInterface.__physicalMovesPositionToPosition(currentPosition, newPosition) # Physical moves to set the board position
+        
+        # Make the physical moves
+        for move in physicalMoves:
+            self.physicalBoard.movePiece(move[0][0:2], move[0][2:4], direct=move[1])
 
     def update(self):
         # Update physical board
