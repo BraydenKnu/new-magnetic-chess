@@ -615,10 +615,10 @@ class ChessInterface:
             
             # Error handling, make sure there is at least one target
             if (len(newPositionByPiece[position[nearestUnresolvedStartSquare]]) == 0):
-                print("No target squares for piece " + position[nearestUnresolvedStartSquare] at square " + nearestUnresolvedStartSquare")
+                print("No target squares for piece " + position[nearestUnresolvedStartSquare] + "at square " + nearestUnresolvedStartSquare")
                 return None
 
-            # Find nearest unfilled target for piece at current square
+            # Find nearest unfilled target for piece at current squares
             nearestUnfilledTarget = None
             nearestTarget = None
             minDistanceToUnfilledTarget = 9999
