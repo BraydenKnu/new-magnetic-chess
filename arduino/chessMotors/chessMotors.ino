@@ -8,7 +8,6 @@
 #define PIN_STEP_B 7
 
 // Multiplexed reed switches
-// TODO: USE ACTUAL PINS
 #define PIN_MUX_SIG 8
 #define PIN_MUX_RANK_S0 A1
 #define PIN_MUX_RANK_S1 A2
@@ -28,12 +27,13 @@
 #define SERIAL_BAUD_RATE 115200
 
 // Incoming command queue
-#define QUEUE_SIZE 1
+#define QUEUE_SIZE 2
 #define COMMAND_LEN 12 // Length of command in chars
 int front = 0;
 int back = 0;
 int count = 0;
 unsigned char commandQueue[QUEUE_SIZE][COMMAND_LEN] = {
+  "DPX0000Y0000",
   "DPX0000Y0000",
 };
 
@@ -46,14 +46,16 @@ long executionTimer = 0;
 
 // Timer intervals
 int motorIntervalMicros = 800;
-int telemetryInterval = 500;
+int telemetryInterval = 5;
 int executionInterval = 50;
 
+// Boundaries (implied bounds at minX=0, minY=0)
 const long maxX = 1860;
 const long maxY = 2630;
 
 const int optimizeDistanceThreshold = 0; // How close we need to be (euclidian distance) to the target position to start executing the next command.
 
+// Initial values
 long motorPosA = 0;
 long motorPosB = 0;
 long targetPosA = 0;
@@ -72,6 +74,24 @@ bool readyToExecute = false;
 bool hasIdlePosition = false;
 long idleA;
 long idleB;
+int currentTelemetryChunk = 0;
+
+/*  REED SWITCH INDEXING - Indexed by reedSwitchValues[column][row]
+ *      _________ _________________
+ *    7 |_|_|_|_| |_|_|_|_|_|_|_|_|
+ *    6 |_|_|_|_| |_|_|_|_|_|_|_|_|
+ *    5 |_|_|_|_| |_|_|_|_|_|_|_|_|
+ *    4 |_|_|_|_| |_|_|_|_|_|_|_|_|
+ *    3 |_|_|_|_| |_|_|_|_|_|_|_|_|
+ *    2 |_|_|_|_| |_|_|_|_|_|_|_|_|
+ *    1 |_|_|_|_| |_|_|_|_|_|_|_|_|
+ *    0 |_|_|_|X| |_|_|_|_|_|_|_|_|
+ *       0 1 2 3   4 5 6 7 8 9 1011
+ *             ^
+ *    Example: Square X's value is stored in reedSwitchValues[3][0]
+ */
+bool reedSwitchValues[12][8];
+bool inputButtonValues[] = {false, false, false, false, false, false};
 
 long hypA;
 long hypB;
@@ -91,6 +111,26 @@ long fastHypotenuse(long a, long b) {
   // return hypB + 0.337 * hypA;                // max error ≈ 5.5 %
   // return max(B, 0.918 * (hypB + (hypA>>1))); // max error ≈ 2.6 %
   return hypB + (0.428 * hypA * hypA) / hypB;   // max error ≈ 1.04 %
+}
+
+const char hexDigits[16] = "0123456789abcdef";
+char binToHexCharacter(bool binDigit3, bool binDigit2, bool bool binDigit1, bool binDigit0) {
+  return hexDigits[(binDigit3 << 3) + (binDigit2 << 2) + (binDigit1 << 1) + (binDigit0)];
+}
+
+void printReedSwitchValuesFromColumn(int column) {
+  Serial.print(binToHexCharacter( // bits 4-7 of column in hex
+    reedSwitchValues[column][7],
+    reedSwitchValues[column][6],
+    reedSwitchValues[column][5],
+    reedSwitchValues[column][4]
+  ));
+  Serial.print(binToHexCharacter(
+    reedSwitchValues[column][3],
+    reedSwitchValues[column][2],
+    reedSwitchValues[column][1],
+    reedSwitchValues[column][0]
+  ));
 }
 
 static long pow10[10] = {
@@ -146,12 +186,6 @@ void enqueueCommandFromSerial() {
     commandQueue[back][i] = in;
   }
   
-  //Serial.print("Received command: ");
-  //for (int i = 0; i < COMMAND_LEN; i++) {
-  //  Serial.write(commandQueue[back][i]);
-  //}
-  //Serial.println();
-  
   count++; // Update count
   back = newBack; // Update the back pointer
 }
@@ -173,23 +207,82 @@ void dequeueCommand() {
   front = newFront;
 }
 
+void updateSwitchesAndButtons() {
+  // TODO: Implement this function. Assigned to Caleb.
+
+  // You might try this algorithm:
+  //
+  // for each column:
+  //   set the PIN_MUX_FILE_S0 through PIN_MUX_FILE_S3 input pins correctly to select the correct column
+  //   for each row:
+  //     set the PIN_MUX_RANK_S0 through PIN_MUX_RANK_S2 input pins correctly to select the correct column
+  //     set reedSwitchValues[column][row] to the value you read from PIN_MUX_SIG.
+  //     // Note that (digitalRead(PIN_MUX_SIG) == LOW) evaluates as true if the reed switch is activated, false otherwise.
+}
+
 void sendTelemetry() {
-  //Serial.print((-motorPosA - motorPosB)/2); // X pos
-  //Serial.print(",");
-  //Serial.print((-motorPosA + motorPosB)/2); // Y pos
-  //Serial.print(",");
-  Serial.print(count); // queued command count (not including currently executing)
-  Serial.print(",");
-  Serial.print(QUEUE_SIZE - count); // Available slots in queue
-  Serial.print(",");
-  // TODO: Reed switches
-  //Serial.print(magnetUp ? 'U' : 'D'); // Current status (command format without leading zeros)
-  //Serial.print(optimizeRoute ? 'O' : 'P');
-  //Serial.print("X");
-  //Serial.print((-targetPosA - targetPosB)/2);
-  //Serial.print("Y");
-  //Serial.print((-targetPosA + targetPosB)/2);
-  Serial.println();
+  // Sends portions of the telemetry data.
+  // We split it into chunks to avoid sending too much at once, which holds up the rest of our system.
+  if (currentTelemetryChunk >= 9) { // Wrap around to beginning of message.
+    currentTelemetryChunk = 0;
+  }
+  switch (currentTelemetryChunk) {
+    case 0:
+      Serial.print(count); // queued command count (not including currently executing)
+      break;
+    case 1:
+      Serial.print(',');
+      Serial.print(QUEUE_SIZE - count); // Available slots in queue
+      Serial.println(); // End of message
+      break;
+    case 2:
+      // Start sending reed switch values in big-endian format (most significant bytes first)
+      Serial.print(',');
+      printReedSwitchValuesFromColumn(11); 
+      printReedSwitchValuesFromColumn(10); 
+      break;
+    case 3:
+      printReedSwitchValuesFromColumn(9);
+      printReedSwitchValuesFromColumn(8);
+      break;
+    case 4:
+      printReedSwitchValuesFromColumn(7);
+      printReedSwitchValuesFromColumn(6);
+      break;
+    case 5:
+      printReedSwitchValuesFromColumn(5);
+      printReedSwitchValuesFromColumn(4);
+      break;
+    case 6:
+      printReedSwitchValuesFromColumn(3);
+      printReedSwitchValuesFromColumn(2);
+      break;
+    case 7:
+      printReedSwitchValuesFromColumn(1);
+      printReedSwitchValuesFromColumn(0);
+      break;
+    case 8:
+      // Arcade-style buttons
+      Serial.print(',');
+      Serial.print(binToHexCharacter(
+        false,
+        false,
+        inputButtonValues[5],
+        inputButtonValues[4]
+      ));
+      Serial.print(binToHexCharacter(
+        inputButtonValues[3],
+        inputButtonValues[2],
+        inputButtonValues[1],
+        inputButtonValues[0]
+      ));
+      Serial.println(); // End of message
+      break;
+    default:
+      print("ERROR: Ran out of telemetry chunks without resetting");
+      currentTelemetryChunk = 0;
+  }
+  currentTelemetryChunk++;
 }
 
 long getDigitsFromNextCommand(int startIndex, int numDigits) {
@@ -226,7 +319,7 @@ void executeNextCommand() {
     return;
   }
   
-  long newTargetX = getDigitsFromNextCommand(3,  4);
+  long newTargetX = getDigitsFromNextCommand(3, 4);
   long newTargetY = getDigitsFromNextCommand(8, 4);
 
   // Check whether this command is valid
@@ -357,7 +450,6 @@ void home() {
 }
 
 void setup() {
-  
   // put your setup code here, to run once:
   Serial.begin(SERIAL_BAUD_RATE);
 
@@ -382,7 +474,6 @@ void setup() {
   pinMode(PIN_LIM_Y, INPUT_PULLUP);
   
   pinMode(PIN_MAGNET, OUTPUT);
-  
 
   digitalWrite(PIN_EN_A, HIGH); // Ensure motors are off
   digitalWrite(PIN_EN_B, HIGH);
@@ -391,8 +482,7 @@ void setup() {
   digitalWrite(PIN_MAGNET, LOW); // Ensure magnet is off
   magnetUp = false;
   
-  // TODO: Uncomment this usage when limit switches are installed
-  //home();
+  home();
 
   currentTime = millis();
   currentTimeMicros = micros();
