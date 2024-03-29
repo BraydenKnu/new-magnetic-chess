@@ -45,7 +45,7 @@ FILES_STANDARD = "abcdefgh"
 FILES_BANK1 = "wx"
 FILES_BANK2 = "yz"
 FILES_BANKS = FILES_BANK1 + FILES_BANK2
-ALL_FILES = FILES_STANDARD + FILES_BANKS
+ALL_FILES = FILES_BANKS + FILES_STANDARD
 ALL_SQUARES = [file + rank for file in ALL_FILES for rank in RANKS]
 
 BOTTOM_RIGHT_CORNER_X = 100
@@ -66,7 +66,7 @@ class PhysicalBoard:
         self.arduinoQueueCount = 0
         self.arduinoQueueAvailableCount = 0
         self.serialInBuffer = ""
-        self.finalDestinationFileRank = (0, 0) # (file, rank) coordinates
+        self.finalDestinationFileRank = (0, 1) # (file, rank) coordinates
         self.__prevCheckReedSwitches = {}
         self.reedSwitches = {}
         for fileRank in ALL_SQUARES:
@@ -290,6 +290,12 @@ class PhysicalBoard:
         
         return commands
     
+    @staticmethod
+    def testBit(num, offset):
+        num = int(num)
+        mask = 1 << offset
+        return (num & mask) > 0
+
     def enqueueCommand(self, command):
         self.commandQueue.append(command)
     
@@ -354,21 +360,43 @@ class PhysicalBoard:
                 print("Arduino error: " + message)
             else:
                 # Message format is:
-                # <queueCount>,<queueAvailableCount>\n
-                # Example: "3,5"
-                splitMessage = message.split(',')
+                # <queueCount>,<queueAvailableCount>,<Reed switches (hex)>,<Arcade Switches (hex)>\n
+                # Example: "3,5,c3c3c3c3c3c3c3c300000000,3f\n",
 
-                """
-                if(len(splitMessage) != 2):
+                splitMessage = message.rstrip('\n\r').split(',')
+
+                if(len(splitMessage) != 4):
                     print("Invalid telemetry message: " + message)
                     return
-                """
                 
                 self.arduinoQueueCount = int(splitMessage[0])
                 self.arduinoQueueAvailableCount = int(splitMessage[1])
+                self.setReedSwitchesFromHex(splitMessage[2])
+                self.setArcadeSwitchesFromHex(splitMessage[3])
             
             print("Received telemetry: " + message) # Debugging
 
+    def setReedSwitchesFromHex(self, hexString):
+        # Reed switches are stored in a hex string, with each bit representing a switch.
+        # It's in big-endian format, so the last switch is the most significant bit of the first byte.
+
+        # Grab first two characters of hex string, then second, then third, etc.
+        # At the same time, count columns backwards from 11 to 0, inclusive.
+        columnIndex = 11 # Index of the column we're on, in ALL_FILES
+        for i in range(0, len(hexString), 2):
+            hexByte = hexString[i:i+2] # Grab two characters
+            byte = int(hexByte, 16) # Convert to integer
+            for rowIndex in range(7): # Loop form 0 to 7, inclusive
+                squareName = ALL_FILES[columnIndex] + str(rowIndex + 1)
+                isOn = PhysicalBoard.testBit(byte, rowIndex) # Get whether the switch is on
+                self.reedSwitches[squareName] = isOn
+            columnIndex -= 1
+    
+    def setArcadeSwitchesFromHex(self, hexString):
+        # Sets the 6 arcade switches from one byte of hex.
+        byte = int(hexString, 16)
+        for i in range(6):
+            self.arcadeSwitches[i] = PhysicalBoard.testBit(byte, i)
     
     def sendNextCommandIfAvailable(self):
         # Sends next command to the Arduino if it's ready
@@ -404,10 +432,6 @@ class PhysicalBoard:
     
     def moveWithoutMagnet(self, start, end):
         self.__movePiece(start, end, direct=True, useMagnetWithDirect=False)
-    
-    def updateReedSwitches(self):
-        # TODO: Implement this with the muxes
-        pass
 
     def getModifiedReedSwitches(self):
         # Compare current state to state from last check to see what the user changed.
@@ -438,3 +462,4 @@ class PhysicalBoard:
                 self.enqueueCommand(upperRightCommand)
             self.update()
             time.sleep(0.25)
+    

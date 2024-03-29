@@ -18,8 +18,14 @@ AUDIO_WPM = 150
 
 NON_TTS_AUDIO = {
     'boot': 'Windows XP Startup.wav',
-    'move': 'move.wav',
+    'move': 'move-self.wav',
+    'check': 'move-check.wav',
     'capture': 'capture.wav',
+    'castle': 'castle.wav',
+    'promote': 'promote.wav',
+    'illegal': 'illegal.wav',
+    'gamestart': 'game-start.wav',
+    'gameend': 'game-end.wav',
 }
 
 MAX_CHANNELS = 8

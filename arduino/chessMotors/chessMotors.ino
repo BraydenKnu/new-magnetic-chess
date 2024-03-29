@@ -16,6 +16,7 @@
 #define PIN_MUX_FILE_S1 A5
 #define PIN_MUX_FILE_S2 A6
 #define PIN_MUX_FILE_S3 A7
+#define PIN_ARCADE_BUTTON_SIG 12
 
 // Limit switches
 #define PIN_LIM_X 9
@@ -29,6 +30,10 @@
 // Incoming command queue
 #define QUEUE_SIZE 2
 #define COMMAND_LEN 12 // Length of command in chars
+
+#define OVERSHOOT_CALIBRATION 30 // Euclidian distance in XY coordinates to overshoot piece movement (magnet up commands)
+const int 
+
 int front = 0;
 int back = 0;
 int count = 0;
@@ -208,16 +213,20 @@ void dequeueCommand() {
 }
 
 void updateSwitchesAndButtons() {
-  // TODO: Implement this function. Assigned to Caleb.
+  // TODO: Implement this function. Assigned to Brayden.
 
   // You might try this algorithm:
   //
   // for each column:
-  //   set the PIN_MUX_FILE_S0 through PIN_MUX_FILE_S3 input pins correctly to select the correct column
+  //   set the PIN_MUX_FILE_S0 through PIN_MUX_FILE_S3 input pins correctly to select the correct column.
+  //   // Probably fastest to write bit 0 of column counter to PIN_MUX_FILE_S0, bit 1 to PIN_MUX_FILE_S1.
   //   for each row:
-  //     set the PIN_MUX_RANK_S0 through PIN_MUX_RANK_S2 input pins correctly to select the correct column
+  //     set the PIN_MUX_RANK_S0 through PIN_MUX_RANK_S2 input pins correctly to select the correct row.
   //     set reedSwitchValues[column][row] to the value you read from PIN_MUX_SIG.
+  //     if row < 6, set inputButtonValues[row] to the value you read from PIN_ARCADE_BUTTON_SIG, since it shares multiplexer select pins with the row mux.
   //     // Note that (digitalRead(PIN_MUX_SIG) == LOW) evaluates as true if the reed switch is activated, false otherwise.
+  //
+  // 
 }
 
 void sendTelemetry() {
@@ -460,7 +469,8 @@ void setup() {
   pinMode(PIN_DIR_B, OUTPUT);
   pinMode(PIN_STEP_B, OUTPUT);
   
-  pinMode(PIN_MUX_SIG, INPUT);
+  pinMode(PIN_MUX_SIG, INPUT_PULLUP);
+  pinMode(PIN_ARCADE_BUTTON_SIG, INPUT_PULLUP);
 
   pinMode(PIN_MUX_RANK_S0, OUTPUT);
   pinMode(PIN_MUX_RANK_S1, OUTPUT);

@@ -1,7 +1,7 @@
 """
 CHESS INTERFACE
 
-Interface between the user, stockfish, and the PhysicalBoard class.
+Interface between the user, engine, and the PhysicalBoard class.
 
 
 COORDINATE SYSTEM
@@ -49,8 +49,8 @@ BANK FILL ORDER: Higher ranks are filled first.
 
 # Imports
 import os
-from stockfish import Stockfish # (pip install stockfish) Documentation: https://pypi.org/project/stockfish/
 import chess                    # (pip install python-chess) Documentation: https://python-chess.readthedocs.io/en/latest/
+import chess.engine             # (pip install python-chess) Documentation: https://python-chess.readthedocs.io/en/latest/
 from PhysicalBoard import PhysicalBoard
 from Audio import Audio
 
@@ -127,8 +127,9 @@ for file in range(len(FILES_STANDARD)):
         ALL_EN_PASSANT_PHYSICAL.append((FILES_STANDARD[file+1] + '4', FILES_STANDARD[file] + '3', FILES_STANDARD[file] + '4'))
 
 class ChessInterface:
-    def __init__(self, enableSound=True):
-        self.stockfish = Stockfish(STOCKFISH_PATH) # (pip install stockfish) Documentation: https://pypi.org/project/stockfish/
+    def __init__(self, enableSound=True, audioObject=None):
+        self.engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) # Use Stockfish as our engine.
+
         self.board = chess.Board()
         self.physicalBoard = PhysicalBoard()
         self.stackLengthAfterMove = [] # Since moves can take multiple steps, we keep track of the final length of the stack after the move is complete 
@@ -138,9 +139,20 @@ class ChessInterface:
         self.enableSound = enableSound
         self.audio = None
         if (enableSound):
-            self.audio = Audio()
-            self.audio.playSound('boot')
-    
+            if (audioObject != None):
+                self.audio = audioObject
+            else:
+                self.audio = Audio()
+
+    def getStockfishMove(self, elo=None):
+        # TODO: Implement this function
+
+        # If skillLevel is None, get the best move, otherwise limit the ELO to the given value
+        # Get the move from stockfish
+        # Return the best move
+        
+        pass
+
     def __allFileRankSquaresAtTaxicabDistance(self, startFileRank, distance):
         # Get all (existing) squares at a given taxicab distance from a given square. Distance must be greater than 0.
         """
@@ -195,12 +207,12 @@ class ChessInterface:
         
         return fileRankSquares
 
-    def __allSquaresSortedByTaxicabDistance(self, startSquare):
+    def allSquaresSortedByTaxicabDistance(self, startSquare):
         # Yields a list of all squares ('a1') sorted by taxicab distance from the start square
         
         distance = 1
         while (distance <= 18): # All squares are within 18 squares (taxicab distance) of every other square, so that's our hard cap on distance
-            fileRankSquares = self.__allFileRankSquaresAtTaxicabDistance(startSquare, distance)
+            fileRankSquares = self.__allFileRankSquaresAtTaxicabDistance(PhysicalBoard.getFileRankCoords(startSquare), distance)
             if (len(fileRankSquares) == 0): # No squares at this distance, so we're done. No configuration will lead to more squares at a greater distance.
                 break
             for fileRank in fileRankSquares:
@@ -281,6 +293,9 @@ class ChessInterface:
                 physicalMoves.append(("a8d8", False))
             elif (end == "g8"):
                 physicalMoves.append(("h8f8", False))
+            
+            if self.enableSound:
+                self.audio.playSound("castle")
         
         elif (self.board.is_en_passant(move=move)):
             capturedSquare = end[0] + start[1] # Get opponent's pawn's position, which should be on the new file but the same rank.
@@ -288,6 +303,9 @@ class ChessInterface:
 
             physicalMoves.append((start + end, True)) # Move our pawn directly
             physicalMoves.append((capturedSquare + bankSquare, False)) # Move opponent's pawn to bank
+
+            if self.enableSound:
+                self.audio.playSound("capture")
         
         elif (move.promotion is not None): # Pawn Promotion
             promotedBankSquare = self.__getFilledBankSquare(self.board.turn, move.promotion)
@@ -296,17 +314,30 @@ class ChessInterface:
             physicalMoves.append((promotedBankSquare + end, False)) # Move the promoted piece from the bank to the board
             physicalMoves.append((start + removedBankSquare, True)) # Move our pawn back to our bank
 
+            if self.enableSound:
+                self.audio.playSound("promote")
+
         elif (move.drop is not None): # Capture
             bankSquare = self.__getEmptyBankSquare(opponent, move.drop)
 
             physicalMoves.append((end + bankSquare, False)) # Move opponent's piece to bank
             physicalMoves.append((start + end, pieceType != chess.KNIGHT)) # Move our piece directly if it's not a knight
 
+            if self.enableSound:
+                self.audio.playSound("capture")
+
         else: # Normal move
             physicalMoves.append((start + end, pieceType != chess.KNIGHT))
 
+            if self.enableSound:
+                self.audio.playSound("move")
+        
         # Move the piece on the virtual board
         self.board.push(move)
+
+        if (self.enableSound):
+            if (self.board.is_check()):
+                self.audio.playSound("check")
 
         # Move the piece on the physical board
         for physicalMove in physicalMoves:
@@ -534,7 +565,7 @@ class ChessInterface:
                             physicalMoves.append((start + chess.square_name(mostLikelyMove.to_square), capturingPiece != chess.KNIGHT))
 
     @staticmethod
-    def __getBoardPositionDict(board):
+    def getBoardPositionDict(board):
         position = {}
         missing_piece_counts = NUM_PIECES.copy()
 
@@ -564,7 +595,7 @@ class ChessInterface:
         
         return position
 
-    def __physicalMovesPositionToPosition(self, oldPosition, newPosition):
+    def physicalMovesPositionToPosition(self, oldPosition, newPosition):
         """
         Algorithm:
 
@@ -586,7 +617,8 @@ class ChessInterface:
             'P': [], 'Q': [], 'R': [], 'B': [], 'N': [], 'K': [],
             'p': [], 'q': [], 'r': [], 'b': [], 'n': [], 'k': []
         }
-        for square, piece in newPosition.items():
+        for square in newPosition.keys():
+            piece = newPosition[square]
             if (piece != None):
                 newPositionByPiece[piece].append(square)
         
@@ -599,7 +631,7 @@ class ChessInterface:
                     unresolvedStartSquares.append(square)
         
         # Start at the closest location to the magnet
-        currentSquare = PhysicalBoard.getSquareFromFileRank(self.board.finalDestinationFileRank)
+        currentSquare = PhysicalBoard.getSquareFromFileRank(self.physicalBoard.finalDestinationFileRank)
         physicalMoves = []
 
         # While there are unresolved start squares:
@@ -639,7 +671,7 @@ class ChessInterface:
 
                 # Move that target to the nearest empty square to it.
                 nearestEmptySquare = None
-                for square in ChessInterface.__allSquaresSortedByTaxicabDistance(nearestFilledTarget):
+                for square in self.allSquaresSortedByTaxicabDistance(nearestFilledTarget):
                     if (position[square] == None):
                         nearestEmptySquare = square
                         break
@@ -652,9 +684,10 @@ class ChessInterface:
                 position[nearestEmptySquare] = position[nearestFilledTarget]
                 position[nearestFilledTarget] = None
 
-                # Update unresolved start squares
-                unresolvedStartSquares.remove(nearestUnresolvedStartSquare)
-                unresolvedStartSquares.append(nearestEmptySquare)
+                # Update unresolved start squares, to ensure the piece we just moved out of the way gets where it needs to go
+                if (nearestFilledTarget in unresolvedStartSquares):
+                    unresolvedStartSquares.remove(nearestFilledTarget)
+                    unresolvedStartSquares.append(nearestEmptySquare)
 
                 # Update nearestUnfilledTarget
                 nearestUnfilledTarget = nearestEmptySquare
@@ -675,7 +708,7 @@ class ChessInterface:
 
     def setBoardFEN(self, fen):
         # Get current position from virtual board
-        currentPosition = ChessInterface.__getBoardPositionDict(self.board)
+        currentPosition = ChessInterface.getBoardPositionDict(self.board)
 
         # Ensure the physical board matches the virtual board (reed switches)
         self.physicalBoard.updateReedSwitches()
@@ -709,8 +742,8 @@ class ChessInterface:
 
         self.board.set_fen(fen) # Set the virtual board position
         
-        newPosition = ChessInterface.__getBoardPositionDict(self.board)
-        physicalMoves = ChessInterface.__physicalMovesPositionToPosition(currentPosition, newPosition) # Physical moves to set the board position
+        newPosition = ChessInterface.getBoardPositionDict(self.board)
+        physicalMoves = ChessInterface.physicalMovesPositionToPosition(currentPosition, newPosition) # Physical moves to set the board position
         
         # Make the physical moves
         for move in physicalMoves:
@@ -718,9 +751,13 @@ class ChessInterface:
 
     def update(self):
         # Update physical board
-        self.physicalBoard.update()      
+        self.physicalBoard.update()
         self.updatePhysicalMoveInProgress()
 
+        # Handle arcade buttons
+
+
+        # Handle moves
         move = self.getMoveFromReedSwitches() # TODO: Don't do this if no reed switches have changed
         if (move != None):
             # Wait to ensure validity - e.g. someone sliding a bishop doesn't trigger a move until they leave it at the end square
