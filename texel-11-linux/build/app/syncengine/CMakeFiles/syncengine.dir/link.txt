@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3  CMakeFiles/syncengine.dir/syncengine.cpp.o -o ../../syncengine  ../../lib/texellib/libtexellib.a -lpthread /usr/lib/arm-linux-gnueabihf/librt.so -latomic 

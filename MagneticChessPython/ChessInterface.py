@@ -73,6 +73,7 @@ if (os_name == 'nt'): # Windows
 else:
     current_os = 'linux'
 STOCKFISH_PATH = STOCKFISH_PATHS[current_os]
+TEXEL_PATH = '/home/chess/new-magnetic-chess/texel-11-linux/build/texel'
 
 # Bank piece types
 BANK_PIECE_TYPES = {
@@ -128,8 +129,9 @@ for file in range(len(FILES_STANDARD)):
 
 class ChessInterface:
     def __init__(self, enableSound=True, audioObject=None):
-        self.engine = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) # Use Stockfish as our engine.
-
+        self.stockfish = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) # Use Stockfish as our engine.
+        if (current_os == 'linux'):
+            self.texel = chess.engine.SimpleEngine.popen_uci(TEXEL_PATH) # Use Texel.
         self.board = chess.Board()
         self.physicalBoard = PhysicalBoard()
         self.stackLengthAfterMove = [] # Since moves can take multiple steps, we keep track of the final length of the stack after the move is complete 
@@ -144,14 +146,14 @@ class ChessInterface:
             else:
                 self.audio = Audio()
 
-    def getStockfishMove(self, elo=None):
-        # TODO: Implement this function
-
-        # If skillLevel is None, get the best move, otherwise limit the ELO to the given value
-        # Get the move from stockfish
+    def getEngineMove(self, elo=None):
+        # If elo is None, get the best move form stockfish, otherwise, set the Texel ELO to the given value
         # Return the best move
-        
-        pass
+        if (elo == None):
+            return self.stockfish.play(self.board, chess.engine.Limit(time=0.2)).move
+        else:
+            self.texel.configure({"UCI_Elo": elo})
+            return self.texel.play(self.board, chess.engine.Limit(time=0.2)).move
 
     def __allFileRankSquaresAtTaxicabDistance(self, startFileRank, distance):
         # Get all (existing) squares at a given taxicab distance from a given square. Distance must be greater than 0.
@@ -749,13 +751,17 @@ class ChessInterface:
         for move in physicalMoves:
             self.physicalBoard.movePiece(move[0][0:2], move[0][2:4], direct=move[1])
 
+    def handleArcadeButtons(self):
+        # Handle arcade buttons
+        pass
+
     def update(self):
         # Update physical board
         self.physicalBoard.update()
         self.updatePhysicalMoveInProgress()
 
         # Handle arcade buttons
-
+        self.handleArcadeButtons()
 
         # Handle moves
         move = self.getMoveFromReedSwitches() # TODO: Don't do this if no reed switches have changed

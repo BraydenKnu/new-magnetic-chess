@@ -69,6 +69,7 @@ class PhysicalBoard:
         self.finalDestinationFileRank = (0, 1) # (file, rank) coordinates
         self.__prevCheckReedSwitches = {}
         self.reedSwitches = {}
+        self.arcadeSwitchCount = [0, 0, 0, 0, 0, 0] # 6 arcade switches
         for fileRank in ALL_SQUARES:
             self.__prevCheckReedSwitches[fileRank] = False
             self.reedSwitches[fileRank] = False
@@ -251,7 +252,6 @@ class PhysicalBoard:
             path.append((endFile, endRank))
         return path
     
-
     @staticmethod
     def buildCommand(x, y, magnetUp, optimizeRoute):
         x = int(x)
@@ -393,10 +393,10 @@ class PhysicalBoard:
             columnIndex -= 1
     
     def setArcadeSwitchesFromHex(self, hexString):
-        # Sets the 6 arcade switches from one byte of hex.
-        byte = int(hexString, 16)
+        # Sets the 6 arcade switch counts from 6 hex characters
+        # TODO actually code this
         for i in range(6):
-            self.arcadeSwitches[i] = PhysicalBoard.testBit(byte, i)
+            self.arcadeSwitchCount[i] = int(hexString[i], 16)
     
     def sendNextCommandIfAvailable(self):
         # Sends next command to the Arduino if it's ready

@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3  CMakeFiles/texelutil.dir/chesstool.cpp.o CMakeFiles/texelutil.dir/matchbookcreator.cpp.o CMakeFiles/texelutil.dir/posgen.cpp.o CMakeFiles/texelutil.dir/spsa.cpp.o CMakeFiles/texelutil.dir/texelutil.cpp.o -o ../../texelutil  ../../lib/texelutillib/libtexelutillib.a ../../lib/texellib/libtexellib.a -lpthread /usr/lib/arm-linux-gnueabihf/librt.so -latomic 

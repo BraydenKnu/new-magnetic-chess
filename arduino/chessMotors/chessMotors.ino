@@ -7,6 +7,15 @@
 #define PIN_DIR_B 6
 #define PIN_STEP_B 7
 
+#define BIT0 = 0x01;
+#define BIT1 = 0x02;
+#define BIT2 = 0x04;
+#define BIT3 = 0x08;
+#define BIT4 = 0x10;
+#define BIT5 = 0x20;
+#define BIT6 = 0x40;
+#define BIT7 = 0x80;
+
 // Multiplexed reed switches
 #define PIN_MUX_SIG 8
 #define PIN_MUX_RANK_S0 A1
@@ -25,14 +34,17 @@
 // Electromagnet
 #define PIN_MAGNET 11
 
+// Serial
 #define SERIAL_BAUD_RATE 115200
 
 // Incoming command queue
 #define QUEUE_SIZE 2
 #define COMMAND_LEN 12 // Length of command in chars
 
+// Configuration
+#define DEBOUNCE_THRESHOLD 10 // In ms, amount we need to wait before detecting an edge of any type
 #define OVERSHOOT_CALIBRATION 30 // Euclidian distance in XY coordinates to overshoot piece movement (magnet up commands)
-const int 
+const int OVERSHOOT_XY_DIAGONAL = OVERSHOOT_CALIBRATION * sqrt(2);
 
 int front = 0;
 int back = 0;
@@ -48,11 +60,13 @@ long currentTimeMicros = 0;
 long motorTimer = 0;
 long telemetryTimer = 0;
 long executionTimer = 0;
+long switchTimer = 0;
 
 // Timer intervals
 int motorIntervalMicros = 800;
-int telemetryInterval = 5;
+int telemetryInterval = 2;
 int executionInterval = 50;
+int switchInterval = 6;
 
 // Boundaries (implied bounds at minX=0, minY=0)
 const long maxX = 1860;
@@ -97,6 +111,8 @@ int currentTelemetryChunk = 0;
  */
 bool reedSwitchValues[12][8];
 bool inputButtonValues[] = {false, false, false, false, false, false};
+unsigned long inputButtonLastPressed = {0, 0, 0, 0, 0, 0};
+char inputButtonCount = {0, 0, 0, 0, 0, 0};
 
 long hypA;
 long hypB;
@@ -119,7 +135,7 @@ long fastHypotenuse(long a, long b) {
 }
 
 const char hexDigits[16] = "0123456789abcdef";
-char binToHexCharacter(bool binDigit3, bool binDigit2, bool bool binDigit1, bool binDigit0) {
+char binToHexCharacter(bool binDigit3, bool binDigit2, bool binDigit1, bool binDigit0) {
   return hexDigits[(binDigit3 << 3) + (binDigit2 << 2) + (binDigit1 << 1) + (binDigit0)];
 }
 
@@ -136,6 +152,15 @@ void printReedSwitchValuesFromColumn(int column) {
     reedSwitchValues[column][1],
     reedSwitchValues[column][0]
   ));
+}
+
+void printArcadeButtonCount(int row) {
+  if (inputButtonCount[row] >= 16) {
+    Serial.print(hexDigits[15]);
+  } else {
+    Serial.print(hexDigits[inputButtonCount[row]]);
+  }
+  inputButtonCount[row] = 0;
 }
 
 static long pow10[10] = {
@@ -212,27 +237,39 @@ void dequeueCommand() {
   front = newFront;
 }
 
+bool tempButtonValue;
 void updateSwitchesAndButtons() {
-  // TODO: Implement this function. Assigned to Brayden.
-
-  // You might try this algorithm:
-  //
-  // for each column:
-  //   set the PIN_MUX_FILE_S0 through PIN_MUX_FILE_S3 input pins correctly to select the correct column.
-  //   // Probably fastest to write bit 0 of column counter to PIN_MUX_FILE_S0, bit 1 to PIN_MUX_FILE_S1.
-  //   for each row:
-  //     set the PIN_MUX_RANK_S0 through PIN_MUX_RANK_S2 input pins correctly to select the correct row.
-  //     set reedSwitchValues[column][row] to the value you read from PIN_MUX_SIG.
-  //     if row < 6, set inputButtonValues[row] to the value you read from PIN_ARCADE_BUTTON_SIG, since it shares multiplexer select pins with the row mux.
-  //     // Note that (digitalRead(PIN_MUX_SIG) == LOW) evaluates as true if the reed switch is activated, false otherwise.
-  //
-  // 
+  currentTime = millis();
+  for (int column = 0; column < 12; column++) {
+    // set the PIN_MUX_FILE_S0 through PIN_MUX_FILE_S3 input pins correctly to select the correct column.
+    digitalWrite(PIN_MUX_FILE_S0, (column & BIT0) == BIT0);
+    digitalWrite(PIN_MUX_FILE_S1, (column & BIT1) == BIT1);
+    digitalWrite(PIN_MUX_FILE_S2, (column & BIT2) == BIT2);
+    digitalWrite(PIN_MUX_FILE_S3, (column & BIT3) == BIT3);
+    for (int row = 0; row < 8; row++) {
+      // set the PIN_MUX_RANK_S0 through PIN_MUX_RANK_S2 input pins correctly to select the correct row.
+      digitalWrite(PIN_MUX_RANK_S0, (column & BIT0) == BIT0);
+      digitalWrite(PIN_MUX_RANK_S1, (column & BIT1) == BIT1);
+      digitalWrite(PIN_MUX_RANK_S2, (column & BIT2) == BIT2);
+      reedSwitchValues[column][row] = (digitalRead(PIN_MUX_SIG) == LOW)); // Read reed switches
+      if (row < 6) {
+        tempButtonValue = (digitalRead(PIN_ARCADE_BUTTON_SIG) == LOW) // Read arcade buttons
+        if (tempButtonValue != inputButtonValues[row] && currentTime >= inputButtonLastPressed[row] + DEBOUNCE_THRESHOLD) { // Button was pressed or released
+          if (tempButtonValue) {
+            inputButtonCount[row]++; // Update count on positive edge
+          }
+          inputButtonValues[row] = tempButtonValue;
+          inputButtonLastPressed[row] = currentTime;
+        }
+      }
+    }
+  }
 }
 
 void sendTelemetry() {
   // Sends portions of the telemetry data.
   // We split it into chunks to avoid sending too much at once, which holds up the rest of our system.
-  if (currentTelemetryChunk >= 9) { // Wrap around to beginning of message.
+  if (currentTelemetryChunk >= 10) { // Wrap around to beginning of message.
     currentTelemetryChunk = 0;
   }
   switch (currentTelemetryChunk) {
@@ -242,7 +279,6 @@ void sendTelemetry() {
     case 1:
       Serial.print(',');
       Serial.print(QUEUE_SIZE - count); // Available slots in queue
-      Serial.println(); // End of message
       break;
     case 2:
       // Start sending reed switch values in big-endian format (most significant bytes first)
@@ -273,22 +309,17 @@ void sendTelemetry() {
     case 8:
       // Arcade-style buttons
       Serial.print(',');
-      Serial.print(binToHexCharacter(
-        false,
-        false,
-        inputButtonValues[5],
-        inputButtonValues[4]
-      ));
-      Serial.print(binToHexCharacter(
-        inputButtonValues[3],
-        inputButtonValues[2],
-        inputButtonValues[1],
-        inputButtonValues[0]
-      ));
+      printArcadeButtonCount(5);
+      printArcadeButtonCount(4);
+      printArcadeButtonCount(3);
+    case 9:
+      printArcadeButtonCount(2);
+      printArcadeButtonCount(1);
+      printArcadeButtonCount(0);
       Serial.println(); // End of message
       break;
     default:
-      print("ERROR: Ran out of telemetry chunks without resetting");
+      Serial.println("ERROR: Ran out of telemetry chunks without resetting");
       currentTelemetryChunk = 0;
   }
   currentTelemetryChunk++;
@@ -485,14 +516,17 @@ void setup() {
   
   pinMode(PIN_MAGNET, OUTPUT);
 
-  digitalWrite(PIN_EN_A, HIGH); // Ensure motors are off
-  digitalWrite(PIN_EN_B, HIGH);
+  digitalWrite(PIN_EN_A, LOW); // Turn on motors for homing
+  digitalWrite(PIN_EN_B, LOW);
   motorsEnabled = false;
 
   digitalWrite(PIN_MAGNET, LOW); // Ensure magnet is off
   magnetUp = false;
   
   home();
+
+  digitalWrite(PIN_EN_A, HIGH); // Disable motors
+  digitalWrite(PIN_EN_B, HIGH);
 
   currentTime = millis();
   currentTimeMicros = micros();
@@ -551,6 +585,11 @@ void loop() {
     }
     
     executionTimer += executionInterval;
+  }
+
+  else if (currentTime >= switchTimer) {
+    updateSwitchesAndButtons();
+    switchTimer += switchInterval;
   }
 
   else if (currentTime >= telemetryTimer) {

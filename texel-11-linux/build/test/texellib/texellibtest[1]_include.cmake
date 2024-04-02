@@ -1,0 +1,5 @@
+if(EXISTS "/home/chess/new-magnetic-chess/texel-11-linux/build/test/texellib/texellibtest[1]_tests.cmake")
+  include("/home/chess/new-magnetic-chess/texel-11-linux/build/test/texellib/texellibtest[1]_tests.cmake")
+else()
+  add_test(texellibtest_NOT_BUILT texellibtest_NOT_BUILT)
+endif()
