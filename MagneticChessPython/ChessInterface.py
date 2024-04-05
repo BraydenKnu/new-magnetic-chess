@@ -51,8 +51,14 @@ BANK FILL ORDER: Higher ranks are filled first.
 import os
 import chess                    # (pip install python-chess) Documentation: https://python-chess.readthedocs.io/en/latest/
 import chess.engine             # (pip install python-chess) Documentation: https://python-chess.readthedocs.io/en/latest/
+import random
+import time
 from PhysicalBoard import PhysicalBoard
 from Audio import Audio
+
+# Configuration
+MOVE_VALIDITY_THRESHOLD = 1 # Time to wait (in seconds) after a human move to consider it finished.
+COMPUTER_MOVE_DELAY = 1 # (in seconds) Wait this long after the last move is finished before making a computer move.
 
 # Constants
 RANKS = "12345678"
@@ -61,6 +67,10 @@ FILES_BANK1 = "wx"
 FILES_BANK2 = "yz"
 FILES_BANKS = FILES_BANK1 + FILES_BANK2
 ALL_FILES = FILES_STANDARD + FILES_BANKS
+
+# Game state machine
+SETUP_BOARD_AND_PLAYERS = 0
+PLAYING_GAME = 1
 
 # detect whether we're on windows or linux
 STOCKFISH_PATHS = {
@@ -97,19 +107,14 @@ BANK_FILL_ORDER = {
     'p': ['z8', 'z7', 'z6', 'z5', 'z4', 'z3', 'z2', 'z1'],
     'q': ['y8', 'y7'],
     'r': ['y6', 'y5'],
-    'b': ['w5', 'w6'],
-    'n': ['w1', 'w2']
+    'b': ['y4', 'y3'],
+    'n': ['y2', 'y1']
 }
 
 NUM_PIECES = {
     'P': 8, 'Q': 2, 'R': 2, 'B': 2, 'N': 2, 'K': 1,
     'p': 8, 'q': 2, 'r': 2, 'b': 2, 'n': 2, 'k': 1
 }
-
-filledBankSquares = {} # Keep track of which bank squares are filled
-for file in ALL_FILES:
-    for rank in RANKS:
-        filledBankSquares[file+rank] = False
 
 # Physical moves for each castling move
 WHITE_KINGSIDE_CASTLE_PHYSICAL = {'e1': False, 'f1': True, 'g1': True, 'h1': False}
@@ -129,6 +134,7 @@ for file in range(len(FILES_STANDARD)):
 
 class ChessInterface:
     def __init__(self, enableSound=True, audioObject=None):
+        self.state = SETUP_BOARD_AND_PLAYERS
         self.stockfish = chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) # Use Stockfish as our engine.
         if (current_os == 'linux'):
             self.texel = chess.engine.SimpleEngine.popen_uci(TEXEL_PATH) # Use Texel.
@@ -137,6 +143,12 @@ class ChessInterface:
         self.stackLengthAfterMove = [] # Since moves can take multiple steps, we keep track of the final length of the stack after the move is complete 
         self.physicalMoveStack = []
         self.reedSwitchStateChanges = []
+        self.lastReedSwitchUpdate = time.time()
+        self.lastMoveTime = time.time()
+        self.movesSinceLastHome = 0
+        self.gameEnded = False
+        self.whiteElo = None
+        self.blackElo = -625
 
         self.enableSound = enableSound
         self.audio = None
@@ -145,6 +157,8 @@ class ChessInterface:
                 self.audio = audioObject
             else:
                 self.audio = Audio()
+            
+            self.audio.playSound("boot")
 
     def getEngineMove(self, elo=None):
         # If elo is None, get the best move form stockfish, otherwise, set the Texel ELO to the given value
@@ -152,9 +166,22 @@ class ChessInterface:
         if (elo == None):
             return self.stockfish.play(self.board, chess.engine.Limit(time=0.2)).move
         else:
-            self.texel.configure({"UCI_Elo": elo})
+            self.texel.configure({"UCI_LimitStrength": True, "UCI_Elo": elo})
             return self.texel.play(self.board, chess.engine.Limit(time=0.2)).move
-
+    
+    def getEval(self):
+        # Get the evaluation of the current board position from white's perspective
+        # Examples: "0.0", "+0.2", "+71.2", "+M3", "-M2"
+        info = self.stockfish.analyse(self.board, chess.engine.Limit(time=0.2))
+        # Check for mate
+        if (info["score"].white().mate() != None):
+            if (info["score"].white().mate() >= 0):
+                return "+M" + str(info["score"].white().mate())
+            else:
+                return "-M" + str(-info["score"].white().mate())
+        else:
+            return str(round(info["score"].white().score() / 100.0, 1))
+    
     def __allFileRankSquaresAtTaxicabDistance(self, startFileRank, distance):
         # Get all (existing) squares at a given taxicab distance from a given square. Distance must be greater than 0.
         """
@@ -224,36 +251,43 @@ class ChessInterface:
     def __getEmptyBankSquare(self, color, type):
         # Loop through the bank fill order to find the first empty square of the given type
         symbol = chess.Piece(type, color).symbol()
+        position = ChessInterface.getBoardPositionDict(self.board)
         for square in BANK_FILL_ORDER[symbol]:
-            if (square not in filledBankSquares):
+            if (position[square] == None):
                 return square
         return None
     
     def __getFilledBankSquare(self, color, type):
         # Loop backwards through the bank fill order to find the most recently filled square of the given type
         symbol = chess.Piece(type, color).symbol()
+        position = ChessInterface.getBoardPositionDict(self.board)
         for square in reversed(BANK_FILL_ORDER[symbol]):
-            if (square in filledBankSquares):
+            if (position[square] != None):
                 return square
         return None
 
-    def __movePhysical(self, extendedMove, sendCommand=True):
+    def __movePhysical(self, extendedMove, sendCommand=True, useStack=True):
         # Move the piece on the physical board
-        self.physicalMoveStack.append(extendedMove) # Push the move to the move stack
+        if (useStack):
+            self.physicalMoveStack.append(extendedMove) # Push the move to the move stack
 
         # Get start and end
         start = extendedMove[0][0:2]
         end = extendedMove[0][2:4]
         direct = extendedMove[1]
 
+        print("MOVING PIECE: " + start + " -> " + end + " (direct: " + str(direct) + ")")
         if (sendCommand):
             self.physicalBoard.movePiece(start, end, direct=direct)
+            self.movesSinceLastHome += 1
     
-    def __undoPhysical(self, sendCommand=True):
+    def __undoPhysical(self, sendCommand=True, useStack=True):
         # Undo the move on the physical board
-        move = self.physicalMoveStack.pop()
+        if (useStack):
+            move = self.physicalMoveStack.pop()
         if (sendCommand):
             self.physicalBoard.movePiece(move[0][2:4], move[0][0:2], direct=move[1])
+            self.movesSinceLastHome += 1
     
     def undoLastMove(self, sendCommands=True):
         # Undo the last move on the virtual board
@@ -269,8 +303,8 @@ class ChessInterface:
 
     def move(self, move, checkLegal=True, sendCommands=True):
         if (checkLegal and move not in self.board.legal_moves):
-            print("Illegal move: " + move)
-            return []
+            print("Illegal move: " + move.uci() + ".")
+            return False
         
         pieceType = self.board.piece_type_at(move.from_square)
         start = chess.square_name(move.from_square)
@@ -303,27 +337,41 @@ class ChessInterface:
             capturedSquare = end[0] + start[1] # Get opponent's pawn's position, which should be on the new file but the same rank.
             bankSquare = self.__getEmptyBankSquare(opponent, chess.PAWN)
 
-            physicalMoves.append((start + end, True)) # Move our pawn directly
-            physicalMoves.append((capturedSquare + bankSquare, False)) # Move opponent's pawn to bank
+            if (start is not None and end is not None and capturedSquare is not None and bankSquare is not None):
+                physicalMoves.append((start + end, True)) # Move our pawn directly
+                physicalMoves.append((capturedSquare + bankSquare, False)) # Move opponent's pawn to bank
+            else:
+                print("Error: could not find required squares for move " + move.uci() + ".")
+                return False
 
             if self.enableSound:
                 self.audio.playSound("capture")
         
         elif (move.promotion is not None): # Pawn Promotion
             promotedBankSquare = self.__getFilledBankSquare(self.board.turn, move.promotion)
-            removedBankSquare = self.__getEmptyBankSquare(self.board.turn, pieceType)
+            removedBankSquare = self.__getEmptyBankSquare(self.board.turn, chess.PAWN)
 
-            physicalMoves.append((promotedBankSquare + end, False)) # Move the promoted piece from the bank to the board
-            physicalMoves.append((start + removedBankSquare, True)) # Move our pawn back to our bank
+            if (start is not None and end is not None and promotedBankSquare is not None and removedBankSquare is not None):
+                physicalMoves.append((promotedBankSquare + end, False)) # Move the promoted piece from the bank to the board
+                physicalMoves.append((start + removedBankSquare, False)) # Move our pawn back to our bank
+            else:
+                print("Error: could not find required squares for move " + move.uci() + ".")
+                return False
 
             if self.enableSound:
                 self.audio.playSound("promote")
 
-        elif (move.drop is not None): # Capture
-            bankSquare = self.__getEmptyBankSquare(opponent, move.drop)
+        elif (self.board.is_capture(move=move)): # Normal capture
+            capturedPiece = self.board.piece_at(move.to_square)
+            capturedType = capturedPiece.piece_type
+            bankSquare = self.__getEmptyBankSquare(opponent, capturedType)
 
-            physicalMoves.append((end + bankSquare, False)) # Move opponent's piece to bank
-            physicalMoves.append((start + end, pieceType != chess.KNIGHT)) # Move our piece directly if it's not a knight
+            if (start is not None and end is not None and bankSquare is not None):
+                physicalMoves.append((end + bankSquare, False)) # Move opponent's piece to bank
+                physicalMoves.append((start + end, pieceType != chess.KNIGHT)) # Move our piece directly if it's not a knight
+            else:
+                print("Error: could not find required squares for move " + move.uci() + ".")
+                return False
 
             if self.enableSound:
                 self.audio.playSound("capture")
@@ -345,6 +393,7 @@ class ChessInterface:
         for physicalMove in physicalMoves:
             self.__movePhysical(physicalMove, sendCommand=sendCommands)
         self.stackLengthAfterMove.append(len(self.physicalMoveStack))
+        return True
     
     def checkDirectPath(self, start, end):
         # Check if there is a direct, empty path between two squares. DOES NOT CHECK START AND END SQUARES.
@@ -401,13 +450,12 @@ class ChessInterface:
     
     def updatePhysicalMoveInProgress(self):
         # Update the physical move in progress
-        self.physicalBoard.updateReedSwitches()
         modifiedReedSwitches = self.physicalBoard.getModifiedReedSwitches()
 
         for square, state in modifiedReedSwitches:
             self.reedSwitchStateChanges.append((square, state))
 
-    def getMoveFromReedSwitches(self):
+    def getMoveFromReedSwitches(self, allowIllegalMoves=False):
         # Get the move from the reed switches. Returns None if no move is detected.
         self.updatePhysicalMoveInProgress()
         
@@ -567,7 +615,7 @@ class ChessInterface:
                             physicalMoves.append((start + chess.square_name(mostLikelyMove.to_square), capturingPiece != chess.KNIGHT))
 
     @staticmethod
-    def getBoardPositionDict(board):
+    def getBoardPositionDict(board, printErrors=True):
         position = {}
         missing_piece_counts = NUM_PIECES.copy()
 
@@ -581,7 +629,8 @@ class ChessInterface:
         
         for piece_symbol in BANK_FILL_ORDER:
             if (missing_piece_counts[piece_symbol] < 0): # Check for too many pieces
-                print("Extra " + str(-missing_piece_counts[piece_symbol]) + "*" + piece_symbol + " found on the board. Cannot load position.")
+                if (printErrors):
+                    print("Extra " + str(-missing_piece_counts[piece_symbol]) + "*" + piece_symbol + " found on the board. Cannot load position.")
                 return None
             
             for square in BANK_FILL_ORDER[piece_symbol]:
@@ -592,7 +641,8 @@ class ChessInterface:
                     position[square] = None
             
             if (missing_piece_counts[piece_symbol] > 0): # Pieces unable to be put in bank
-                print("Board missing " + str(missing_piece_counts[piece_symbol]) + "*" + piece_symbol + " which could not be placed into bank.")
+                if (printErrors):
+                    print("Board missing " + str(missing_piece_counts[piece_symbol]) + "*" + piece_symbol + " which could not be placed into bank.")
                 return None
         
         return position
@@ -625,7 +675,7 @@ class ChessInterface:
                 newPositionByPiece[piece].append(square)
         
         unresolvedStartSquares = []
-        for square, piece in position.items():
+        for square, piece in position.items(): 
             if (piece != None):
                 if (square in newPositionByPiece[piece]): # Piece is in the correct square
                     position[square] = None
@@ -706,67 +756,185 @@ class ChessInterface:
             physicalMoves.append((nearestUnresolvedStartSquare + nearestUnfilledTarget, False)) # Physical move
         
         return physicalMoves
-        
-
-    def setBoardFEN(self, fen):
+    
+    def setBoardFEN(self, fen, sendCommands=True, errorCheckUsingReedSwitches=True):
         # Get current position from virtual board
         currentPosition = ChessInterface.getBoardPositionDict(self.board)
 
-        # Ensure the physical board matches the virtual board (reed switches)
-        self.physicalBoard.updateReedSwitches()
-        missingSquares = []
-        extraSquares = []
-        for square in currentPosition.keys():
-            if (currentPosition[square] == None): # No piece, reed switch should be off
-                if (self.physicalBoard.reedSwitches[square] == True):
-                    extraSquares.append(square)
-            else: # Piece, reed switch should be on
-                if (self.physicalBoard.reedSwitches[square] == False):
-                    missingSquares.append(square)
-        
-        if (len(missingSquares) > len(extraSquares)):
-            print("Board is missing pieces!")
-            return
-        
-        if (len(missingSquares) + len(extraSquares) > 0):
-            print("Board position inconsistent with reed switches.")
-            if (len(missingSquares) + len(extraSquares) > 2):
-                print("More than 2 squares are inconsistent, cannot automatically fix. Please reset to the starting position manually.")
+        if errorCheckUsingReedSwitches:
+            # Ensure the physical board matches the virtual board (reed switches)
+            missingSquares = []
+            extraSquares = []
+            for square in currentPosition.keys():
+                if (currentPosition[square] == None): # No piece, reed switch should be off
+                    if (self.physicalBoard.reedSwitches[square] == True):
+                        extraSquares.append(square)
+                else: # Piece, reed switch should be on
+                    if (self.physicalBoard.reedSwitches[square] == False):
+                        missingSquares.append(square)
+            
+            if (len(missingSquares) > len(extraSquares)):
+                print("Board is missing pieces!")
                 return
-        
-        
-        
-        # Basic error correction for one missing and one extra square
-        if (len(missingSquares) == 1 and len(extraSquares) == 1):
-            # In our virtual position, move the piece from the extra square to the missing square
-            currentPosition[missingSquares[0]] = currentPosition[extraSquares[0]]
-            currentPosition[extraSquares[0]] = None
+            
+            if (len(missingSquares) + len(extraSquares) > 0):
+                print("Board position inconsistent with reed switches.")
+                if (len(missingSquares) + len(extraSquares) > 2):
+                    print("More than 2 squares are inconsistent, cannot automatically fix. Please reset to the starting position manually.")
+                    return
+            
+            # Basic error correction for one missing and one extra square
+            if (len(missingSquares) == 1 and len(extraSquares) == 1):
+                # In our virtual position, move the piece from the extra square to the missing square
+                currentPosition[missingSquares[0]] = currentPosition[extraSquares[0]]
+                currentPosition[extraSquares[0]] = None
 
         self.board.set_fen(fen) # Set the virtual board position
-        
         newPosition = ChessInterface.getBoardPositionDict(self.board)
-        physicalMoves = ChessInterface.physicalMovesPositionToPosition(currentPosition, newPosition) # Physical moves to set the board position
+        physicalMoves = self.physicalMovesPositionToPosition(currentPosition, newPosition) # Physical moves to set the board position
         
         # Make the physical moves
         for move in physicalMoves:
-            self.physicalBoard.movePiece(move[0][0:2], move[0][2:4], direct=move[1])
-
-    def handleArcadeButtons(self):
-        # Handle arcade buttons
+            self.__movePhysical(move, sendCommand=sendCommands, useStack=False)
+    
+    def resetBoard(self, sendCommands=True, errorCheckUsingReedSwitches=True):
+        # Reset the board to the starting position
+        self.physicalMoveStack = []
+        self.stackLengthAfterMove = []
+        if (self.board.fen() == chess.STARTING_FEN): # Already at the starting position
+            return
+        
+        self.setBoardFEN(chess.STARTING_FEN, sendCommands=sendCommands, errorCheckUsingReedSwitches=errorCheckUsingReedSwitches)
+        
+    def handleArcadeButtons(self, isInGame=False):
+        # TODO: Caleb - Handle arcade buttons
         pass
 
-    def update(self):
+    def printBoard(self):
+        fullPosition = ChessInterface.getBoardPositionDict(self.board)
+        for rank in reversed(RANKS):
+            for file in FILES_BANKS:
+                piece = fullPosition[file+rank]
+                if (piece == None):
+                    print(".", end=" ")
+                else:
+                    print(piece, end=" ")
+            print(" ", end=" ")
+            for file in FILES_STANDARD:
+                piece = fullPosition[file+rank]
+                if (piece == None):
+                    print(".", end=" ")
+                else:
+                    print(piece, end=" ")
+            print()
+        print("Evaluation: " + self.getEval())
+
+    def update(self, sendCommands=True):
         # Update physical board
         self.physicalBoard.update()
-        self.updatePhysicalMoveInProgress()
 
-        # Handle arcade buttons
-        self.handleArcadeButtons()
+        # State machine
+        if (self.state == SETUP_BOARD_AND_PLAYERS):
+            self.resetBoard(sendCommands=sendCommands, errorCheckUsingReedSwitches=False)
+            
+            # Setup board and players
+            self.handleArcadeButtons(isInGame=False)
+            if (not self.physicalBoard.isAllCommandsFinished()):
+                self.state = PLAYING_GAME # TODO: DEBUG - REMOVE THIS LINE
+                self.gameEnded = False
+        elif (self.state == PLAYING_GAME):
+            # Play the game
+            # self.updatePhysicalMoveInProgress()
 
-        # Handle moves
-        move = self.getMoveFromReedSwitches() # TODO: Don't do this if no reed switches have changed
-        if (move != None):
-            # Wait to ensure validity - e.g. someone sliding a bishop doesn't trigger a move until they leave it at the end square
-            # Also ensure a move can be updated as long as the computer has not moved.
-            # TODO: Implement wait without delay
-            pass
+            """
+            # Handle moves
+            move = self.getMoveFromReedSwitches() # TODO: Don't do this if no reed switches have changed
+            if (move != None):
+                currentTime = time.time()
+                self.lastReedSwitchUpdate = currentTime
+                # Wait to ensure validity - e.g. someone sliding a bishop doesn't trigger a move until they leave it at the end square
+                if (currentTime - self.lastReedSwitchUpdate > MOVE_VALIDITY_THRESHOLD):
+                    self.move(move, sendCommands=False)
+            """
+
+            # Stockfish move
+            elo = self.whiteElo if self.board.turn == chess.WHITE else self.blackElo
+            move = self.getEngineMove(elo=elo)
+            if (move != None and move.uci() != "0000"):
+                if ((self.physicalBoard.isAllCommandsFinished() and time.time() - self.physicalBoard.firstAvailableTime > COMPUTER_MOVE_DELAY) or sendCommands == False):
+                    self.printBoard()
+                    print("Engine move: " + move.uci())
+                    self.physicalBoard.firstAvailableTime += COMPUTER_MOVE_DELAY # Prevent moving again before physical board realizes there was a move
+                    success = self.move(move, sendCommands=sendCommands)
+                    if (not success):
+                        legalMoves = self.board.legal_moves
+                        print("Trying all legal moves to see if they are possible")
+                        while legalMoves is not None and legalMoves != []:
+                            # Choose a random legal move index
+                            moveIndex = random.randint(0, len(legalMoves) - 1)
+                            legalMove = legalMoves.pop(moveIndex)
+                            success = self.move(legalMove, sendCommands=sendCommands)
+                            if (success):
+                                break
+                    if (not success):
+                        print("Engine move failed (not possible to do with piece bank).")
+                        return True
+            
+            # Check for game end
+            if (self.board.is_game_over()):
+                if (not self.gameEnded):
+                    self.gameEnded = True
+
+                    self.printBoard()
+                    result = "Checkmate" if self.board.is_checkmate() else "Stalemate" if self.board.is_stalemate() else "Non-stalemate draw"
+                    print("Game over by " + result)
+
+                    if (self.enableSound):
+                        self.audio.playSound("gameend")
+
+                    self.physicalBoard.enqueueCommand('HPX0000Y0000')
+                
+                # Wait for the arduino to finish
+                if (self.physicalBoard.isAllCommandsFinished()):
+                    self.state = SETUP_BOARD_AND_PLAYERS
+                    return True
+    
+    def setWhiteElo(self, elo):
+        self.whiteElo = elo
+    
+    def setBlackElo(self, elo):
+        self.blackElo = elo
+    
+    def goTo(self, x, y, magnetUp=False, home=True):
+        # Debugging function to move the physical board to a specific location
+        homeCommand = 'HPX0000Y0000'
+        command = self.physicalBoard.buildCommand(x, y, magnetUp, False)
+        if (home):
+            self.physicalBoard.enqueueCommand(homeCommand)
+        self.physicalBoard.enqueueCommand(command)
+        while not self.physicalBoard.isAllCommandsFinished():
+            self.physicalBoard.update()
+    
+    def goToSquare(self, square, magnetUp=False, home=True):
+        # Debugging function to move the physical board to a specific square
+        fileRank = self.physicalBoard.getFileRankCoords(square)
+        (x, y) = self.physicalBoard.getXYFromFileRank(fileRank)
+        self.goTo(x, y, magnetUp=magnetUp, home=home)
+    
+    def loop(self, sendCommands=True):
+        # Main loop
+        try:
+            gameOver = False
+            while not gameOver:
+                gameOver = self.update(sendCommands=sendCommands)
+        except KeyboardInterrupt:
+            self.physicalBoard.close()
+            if (self.enableSound):
+                self.audio.close()
+            if (self.stockfish != None):
+                self.stockfish.quit()
+            if (self.texel != None):
+                self.texel.quit()
+            print("Keyboard interrupt. Exiting.")
+            return
+        

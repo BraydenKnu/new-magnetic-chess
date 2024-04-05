@@ -1,50 +1,47 @@
 
+#define BIT0 0x01
+#define BIT1 0x02
+#define BIT2 0x04
+#define BIT3 0x08
+#define BIT4 0x10
+#define BIT5 0x20
+#define BIT6 0x40
+#define BIT7 0x80
+
 // Stepper drivers
-#define PIN_EN_A 2
+#define PIN_EN_MOTORS 2
 #define PIN_DIR_A 3
 #define PIN_STEP_A 4
-#define PIN_EN_B 5
-#define PIN_DIR_B 6
-#define PIN_STEP_B 7
-
-#define BIT0 = 0x01;
-#define BIT1 = 0x02;
-#define BIT2 = 0x04;
-#define BIT3 = 0x08;
-#define BIT4 = 0x10;
-#define BIT5 = 0x20;
-#define BIT6 = 0x40;
-#define BIT7 = 0x80;
+#define PIN_DIR_B 5
+#define PIN_STEP_B 6
 
 // Multiplexed reed switches
-#define PIN_MUX_SIG 8
+#define PIN_MUX_SIG 7
 #define PIN_MUX_RANK_S0 A1
 #define PIN_MUX_RANK_S1 A2
 #define PIN_MUX_RANK_S2 A3
 #define PIN_MUX_FILE_S0 A4
 #define PIN_MUX_FILE_S1 A5
-#define PIN_MUX_FILE_S2 A6
-#define PIN_MUX_FILE_S3 A7
-#define PIN_ARCADE_BUTTON_SIG 12
+#define PIN_MUX_FILE_S2 12
+#define PIN_MUX_FILE_S3 11
+#define PIN_ARCADE_BUTTON_SIG 13
 
 // Limit switches
-#define PIN_LIM_X 9
-#define PIN_LIM_Y 10
+#define PIN_LIM_X 8
+#define PIN_LIM_Y 9
 
 // Electromagnet
-#define PIN_MAGNET 11
+#define PIN_MAGNET 10
 
 // Serial
 #define SERIAL_BAUD_RATE 115200
 
 // Incoming command queue
-#define QUEUE_SIZE 2
+#define QUEUE_SIZE 5
 #define COMMAND_LEN 12 // Length of command in chars
 
 // Configuration
 #define DEBOUNCE_THRESHOLD 10 // In ms, amount we need to wait before detecting an edge of any type
-#define OVERSHOOT_CALIBRATION 30 // Euclidian distance in XY coordinates to overshoot piece movement (magnet up commands)
-const int OVERSHOOT_XY_DIAGONAL = OVERSHOOT_CALIBRATION * sqrt(2);
 
 int front = 0;
 int back = 0;
@@ -52,6 +49,9 @@ int count = 0;
 unsigned char commandQueue[QUEUE_SIZE][COMMAND_LEN] = {
   "DPX0000Y0000",
   "DPX0000Y0000",
+  "DPX0000Y0000",
+  "DPX0000Y0000",
+  "DPX0000Y0000"
 };
 
 // Timers
@@ -63,8 +63,8 @@ long executionTimer = 0;
 long switchTimer = 0;
 
 // Timer intervals
-int motorIntervalMicros = 800;
-int telemetryInterval = 2;
+int motorIntervalMicros = 1200;
+int telemetryInterval = 4;
 int executionInterval = 50;
 int switchInterval = 6;
 
@@ -111,8 +111,8 @@ int currentTelemetryChunk = 0;
  */
 bool reedSwitchValues[12][8];
 bool inputButtonValues[] = {false, false, false, false, false, false};
-unsigned long inputButtonLastPressed = {0, 0, 0, 0, 0, 0};
-char inputButtonCount = {0, 0, 0, 0, 0, 0};
+unsigned long inputButtonLastPressed[] = {0, 0, 0, 0, 0, 0};
+char inputButtonCount[] = {0, 0, 0, 0, 0, 0};
 
 long hypA;
 long hypB;
@@ -248,12 +248,13 @@ void updateSwitchesAndButtons() {
     digitalWrite(PIN_MUX_FILE_S3, (column & BIT3) == BIT3);
     for (int row = 0; row < 8; row++) {
       // set the PIN_MUX_RANK_S0 through PIN_MUX_RANK_S2 input pins correctly to select the correct row.
-      digitalWrite(PIN_MUX_RANK_S0, (column & BIT0) == BIT0);
-      digitalWrite(PIN_MUX_RANK_S1, (column & BIT1) == BIT1);
-      digitalWrite(PIN_MUX_RANK_S2, (column & BIT2) == BIT2);
-      reedSwitchValues[column][row] = (digitalRead(PIN_MUX_SIG) == LOW)); // Read reed switches
+      digitalWrite(PIN_MUX_RANK_S0, (row & BIT0) == BIT0);
+      digitalWrite(PIN_MUX_RANK_S1, (row & BIT1) == BIT1);
+      digitalWrite(PIN_MUX_RANK_S2, (row & BIT2) == BIT2);
+      delayMicroseconds(20);
+      reedSwitchValues[column][row] = (digitalRead(PIN_MUX_SIG) == LOW); // Read reed switches
       if (row < 6) {
-        tempButtonValue = (digitalRead(PIN_ARCADE_BUTTON_SIG) == LOW) // Read arcade buttons
+        tempButtonValue = (digitalRead(PIN_ARCADE_BUTTON_SIG) == LOW); // Read arcade buttons
         if (tempButtonValue != inputButtonValues[row] && currentTime >= inputButtonLastPressed[row] + DEBOUNCE_THRESHOLD) { // Button was pressed or released
           if (tempButtonValue) {
             inputButtonCount[row]++; // Update count on positive edge
@@ -274,6 +275,12 @@ void sendTelemetry() {
   }
   switch (currentTelemetryChunk) {
     case 0:
+      if (!motorsEnabled) {
+        Serial.print("F"); // Finished Executing
+      } else {
+        Serial.print("E"); // Executing
+      }
+      Serial.print(',');
       Serial.print(count); // queued command count (not including currently executing)
       break;
     case 1:
@@ -312,6 +319,7 @@ void sendTelemetry() {
       printArcadeButtonCount(5);
       printArcadeButtonCount(4);
       printArcadeButtonCount(3);
+      break;
     case 9:
       printArcadeButtonCount(2);
       printArcadeButtonCount(1);
@@ -321,6 +329,7 @@ void sendTelemetry() {
     default:
       Serial.println("ERROR: Ran out of telemetry chunks without resetting");
       currentTelemetryChunk = 0;
+      break;
   }
   currentTelemetryChunk++;
 }
@@ -378,10 +387,16 @@ void executeNextCommand() {
   }
 
   // Route settings
-  if (commandQueue[front][0] == 'U') { // Magnet up
+  if (commandQueue[front][0] == 'H') { // Home, ignore everything else
+    homeMotors();
+    dequeueCommand();
+    return;
+  } else if (commandQueue[front][0] == 'U') { // Magnet up
     magnetUp = true;
+    digitalWrite(PIN_MAGNET, HIGH);
   } else if (commandQueue[front][0] == 'D') { // Magnet down
     magnetUp = false;
+    digitalWrite(PIN_MAGNET, LOW);
   }
   optimizeRoute = (commandQueue[front][1] == 'O'); // Optimize route setting (execute next command early to move faster)
 
@@ -430,8 +445,7 @@ void step(bool motorA, bool motorB, bool dirA, bool dirB, bool updateTargets) {
 
 void abortMission() {
   // Disable motors
-  digitalWrite(PIN_EN_A, HIGH);
-  digitalWrite(PIN_EN_B, HIGH);
+  digitalWrite(PIN_EN_MOTORS, HIGH);
 
   // Disable magnet
   digitalWrite(PIN_MAGNET, LOW);
@@ -443,7 +457,11 @@ void abortMission() {
 }
 
 long tempCount;
-void home() {
+void homeMotors() {
+  // Disable electromagnet
+  magnetUp = false;
+  digitalWrite(PIN_MAGNET, LOW);
+  
   // Move in -x direction until we hit the switch or go for maxX steps
   tempCount = 0;
   while (tempCount < maxX) {
@@ -493,10 +511,9 @@ void setup() {
   // put your setup code here, to run once:
   Serial.begin(SERIAL_BAUD_RATE);
 
-  pinMode(PIN_EN_A, OUTPUT);
+  pinMode(PIN_EN_MOTORS, OUTPUT);
   pinMode(PIN_DIR_A, OUTPUT);
   pinMode(PIN_STEP_A, OUTPUT);
-  pinMode(PIN_EN_B, OUTPUT);
   pinMode(PIN_DIR_B, OUTPUT);
   pinMode(PIN_STEP_B, OUTPUT);
   
@@ -516,17 +533,15 @@ void setup() {
   
   pinMode(PIN_MAGNET, OUTPUT);
 
-  digitalWrite(PIN_EN_A, LOW); // Turn on motors for homing
-  digitalWrite(PIN_EN_B, LOW);
+  digitalWrite(PIN_EN_MOTORS, LOW); // Turn on motors for homing
   motorsEnabled = false;
 
   digitalWrite(PIN_MAGNET, LOW); // Ensure magnet is off
   magnetUp = false;
   
-  home();
+  homeMotors();
 
-  digitalWrite(PIN_EN_A, HIGH); // Disable motors
-  digitalWrite(PIN_EN_B, HIGH);
+  digitalWrite(PIN_EN_MOTORS, HIGH); // Disable motors
 
   currentTime = millis();
   currentTimeMicros = micros();
@@ -558,8 +573,7 @@ void loop() {
     // TODO: Implement idle position
     if (count > 0) {
       if (!motorsEnabled) {
-        digitalWrite(PIN_EN_A, LOW); // Enable motors
-        digitalWrite(PIN_EN_B, LOW);
+        digitalWrite(PIN_EN_MOTORS, LOW); // Enable motors
         motorsEnabled = true;
       }
       
@@ -576,8 +590,7 @@ void loop() {
       }
     } else { // No commands, idle state
       if (motorsEnabled && targetDistanceA == 0 && targetDistanceB == 0) {
-        digitalWrite(PIN_EN_A, HIGH);
-        digitalWrite(PIN_EN_B, HIGH);
+        digitalWrite(PIN_EN_MOTORS, HIGH);
         digitalWrite(PIN_MAGNET, LOW);
         motorsEnabled = false;
         magnetUp = false;
@@ -586,11 +599,13 @@ void loop() {
     
     executionTimer += executionInterval;
   }
-
+  
+  /*
   else if (currentTime >= switchTimer) {
     updateSwitchesAndButtons();
     switchTimer += switchInterval;
   }
+  */
 
   else if (currentTime >= telemetryTimer) {
     sendTelemetry();

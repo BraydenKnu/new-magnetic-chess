@@ -38,7 +38,6 @@ import time
 if (current_os == LINUX):
     import serial
 
-
 # Constants
 RANKS = "12345678"
 FILES_STANDARD = "abcdefgh"
@@ -48,9 +47,13 @@ FILES_BANKS = FILES_BANK1 + FILES_BANK2
 ALL_FILES = FILES_BANKS + FILES_STANDARD
 ALL_SQUARES = [file + rank for file in ALL_FILES for rank in RANKS]
 
-BOTTOM_RIGHT_CORNER_X = 100
-BOTTOM_RIGHT_CORNER_Y = 100
-SQUARE_SIZE = 150
+# TOP LEFT CORNER: 155, 45
+# BOTTOM LEFT CORNER: 1800, 45
+BANK_TOP_LEFT_CORNER_X = 155
+BANK_TOP_LEFT_CORNER_Y = 45
+BOARD_TOP_LEFT_CORNER_X = 145
+BOARD_TOP_LEFT_CORNER_Y = 1005
+SQUARE_SIZE = 205.625
 
 SERIAL_BAUD = 115200
 USB_INTERFACES = [
@@ -60,9 +63,13 @@ USB_INTERFACES = [
     '/dev/ttyUSB3'
 ]
 
+HOME_COMMAND = 'HPX0000Y0000' # Command to home the motors
+
 class PhysicalBoard:
     def __init__(self):
         self.commandQueue = []
+        self.isArduinoBusy = False
+        self.firstAvailableTime = time.time()
         self.arduinoQueueCount = 0
         self.arduinoQueueAvailableCount = 0
         self.serialInBuffer = ""
@@ -76,6 +83,7 @@ class PhysicalBoard:
         
         if (current_os == LINUX):
             self.arduino = self.beginSerial()
+            self.home() # Home motors after connecting
         else:
             self.arduino = None
 
@@ -166,8 +174,17 @@ class PhysicalBoard:
     @staticmethod
     def getXYFromFileRank(fileRankCoords):
         (file, rank) = fileRankCoords
-        x = BOTTOM_RIGHT_CORNER_X + (rank - 1 + 0.5) * SQUARE_SIZE
-        y = BOTTOM_RIGHT_CORNER_Y + (-file + 7 + 0.5) * SQUARE_SIZE
+        if (file < 0):
+            topLeftX = BANK_TOP_LEFT_CORNER_X
+            topLeftY = BANK_TOP_LEFT_CORNER_Y
+            relativeFile = file + 5
+        else:
+            topLeftX = BOARD_TOP_LEFT_CORNER_X
+            topLeftY = BOARD_TOP_LEFT_CORNER_Y
+            relativeFile = file
+        
+        x = topLeftX + (8 - rank + 0.5) * SQUARE_SIZE
+        y = topLeftY + (relativeFile + 0.5) * SQUARE_SIZE
         return (int(x), int(y))
 
     @staticmethod
@@ -295,6 +312,9 @@ class PhysicalBoard:
         num = int(num)
         mask = 1 << offset
         return (num & mask) > 0
+    
+    def isAllCommandsFinished(self):
+        return len(self.commandQueue) == 0 and self.arduinoQueueCount == 0 and not self.isArduinoBusy
 
     def enqueueCommand(self, command):
         self.commandQueue.append(command)
@@ -318,13 +338,12 @@ class PhysicalBoard:
                 arduino.flush()
                 connected = True
             except serial.SerialException as e:
-                print("Error connecting to Arduino (" + str(e) + "). Retrying...")
+                print("Error connecting to Arduino. Retrying...")
                 time.sleep(0.2)
 
                 trying_interface += 1
                 if trying_interface >= len(USB_INTERFACES):
                     trying_interface = 0
-
 
         print("Connected to Arduino on " + USB_INTERFACES[trying_interface])
         arduino.flush()
@@ -335,7 +354,13 @@ class PhysicalBoard:
         # Updates self.arduinoQueueAvailableCount and other things from Arduino serial telemetry
         if (self.arduino.in_waiting > 0):
             # Each telemetry message ends in a newline.
-            self.serialInBuffer += self.arduino.read(self.arduino.in_waiting).decode()
+            incoming_serial = self.arduino.read(self.arduino.in_waiting)
+            try:
+                additional = incoming_serial.decode()
+                self.serialInBuffer += additional
+            except UnicodeDecodeError:
+                print("WARNING: Recieved corrupted telemetry data. Ignored and cleared buffer. This will likely cause more errors.")
+                self.serialInBuffer = ""
         
         message = ""
 
@@ -360,21 +385,25 @@ class PhysicalBoard:
                 print("Arduino error: " + message)
             else:
                 # Message format is:
-                # <queueCount>,<queueAvailableCount>,<Reed switches (hex)>,<Arcade Switches (hex)>\n
-                # Example: "3,5,c3c3c3c3c3c3c3c300000000,3f\n",
+                # <Finished/Executing (F/E),<queueCount>,<queueAvailableCount>,<Reed switches (hex)>,<Arcade Switch count since last message (hex)>\n
+                # Example: "F,3,5,c3c3c3c3c3c3c3c300000000,210003\n",
 
                 splitMessage = message.rstrip('\n\r').split(',')
 
-                if(len(splitMessage) != 4):
+                if(len(splitMessage) != 5):
                     print("Invalid telemetry message: " + message)
                     return
                 
-                self.arduinoQueueCount = int(splitMessage[0])
-                self.arduinoQueueAvailableCount = int(splitMessage[1])
-                self.setReedSwitchesFromHex(splitMessage[2])
-                self.setArcadeSwitchesFromHex(splitMessage[3])
+                busy = splitMessage[0] == 'E'
+                if (not busy and self.isArduinoBusy and len(self.commandQueue) == 0 and self.arduinoQueueCount == 0):
+                    self.firstAvailableTime = time.time()
+                self.isArduinoBusy = busy
+                self.arduinoQueueCount = int(splitMessage[1])
+                self.arduinoQueueAvailableCount = int(splitMessage[2])
+                self.setReedSwitchesFromHex(splitMessage[3])
+                self.setArcadeSwitchesFromHex(splitMessage[4])
             
-            print("Received telemetry: " + message) # Debugging
+            # print("Received telemetry: " + message) # Debugging
 
     def setReedSwitchesFromHex(self, hexString):
         # Reed switches are stored in a hex string, with each bit representing a switch.
@@ -402,7 +431,7 @@ class PhysicalBoard:
         # Sends next command to the Arduino if it's ready
         self.receiveTelemetry()
 
-        if (len(self.commandQueue) > 0 and self.arduinoQueueAvailableCount > 0):
+        if (len(self.commandQueue) > 0 and self.arduinoQueueAvailableCount > 3):
             command = self.dequeueCommand()
             command = '#' + command # start character
             print("Sending command: " + command)
@@ -433,33 +462,18 @@ class PhysicalBoard:
     def moveWithoutMagnet(self, start, end):
         self.__movePiece(start, end, direct=True, useMagnetWithDirect=False)
 
+    def home(self):
+        # Homes the motors by sending a command beginning with 'H'
+        self.commandQueue = [] # Clear any existing commands
+        self.enqueueCommand(HOME_COMMAND) # Send home command
+        self.sendNextCommandIfAvailable()
+
     def getModifiedReedSwitches(self):
         # Compare current state to state from last check to see what the user changed.
-        self.updateReedSwitches()
         modifiedReedSwitches = {}
         for square in ALL_SQUARES:
             if (self.__prevCheckReedSwitches[square] != self.reedSwitches[square]):
                 modifiedReedSwitches[square] = self.reedSwitches[square]
 
         return modifiedReedSwitches
-    
-    def debugRunRectanglesAroundBoard(self):
-        # Debugging function to run rectangles around the board, until the user stops it.
-        # Start at lower right corner of board, then lower left, then upper left, then upper right.
-
-        optimize = True
-
-        lowerRightCommand = PhysicalBoard.buildCommand(BOTTOM_RIGHT_CORNER_X, BOTTOM_RIGHT_CORNER_Y, optimizeRoute=optimize, magnetUp=False)
-        lowerLeftCommand = PhysicalBoard.buildCommand(BOTTOM_RIGHT_CORNER_X, BOTTOM_RIGHT_CORNER_Y + 13*SQUARE_SIZE, optimizeRoute=optimize, magnetUp=False)
-        upperLeftCommand = PhysicalBoard.buildCommand(BOTTOM_RIGHT_CORNER_X + 8*SQUARE_SIZE, BOTTOM_RIGHT_CORNER_Y + 13*SQUARE_SIZE, optimizeRoute=optimize, magnetUp=False)
-        upperRightCommand = PhysicalBoard.buildCommand(BOTTOM_RIGHT_CORNER_X + 8*SQUARE_SIZE, BOTTOM_RIGHT_CORNER_Y, optimizeRoute=optimize, magnetUp=False)
-
-        while True:
-            if (len(self.commandQueue) == 0):
-                self.enqueueCommand(lowerRightCommand)
-                self.enqueueCommand(lowerLeftCommand)
-                self.enqueueCommand(upperLeftCommand)
-                self.enqueueCommand(upperRightCommand)
-            self.update()
-            time.sleep(0.25)
     
