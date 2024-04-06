@@ -115,7 +115,9 @@ NUM_PIECES = {
     'P': 8, 'Q': 2, 'R': 2, 'B': 2, 'N': 2, 'K': 1,
     'p': 8, 'q': 2, 'r': 2, 'b': 2, 'n': 2, 'k': 1
 }
-
+AILEVEL_TO_ELO = {
+    1: 200, 2: 400, 3: 600, 4: 800, 5: 1000, 6: 1200, 7: 1400, 8: 1600, 9: 1800, 10: None
+}
 # Physical moves for each castling move
 WHITE_KINGSIDE_CASTLE_PHYSICAL = {'e1': False, 'f1': True, 'g1': True, 'h1': False}
 WHITE_QUEENSIDE_CASTLE_PHYSICAL = {'e1': False, 'd1': True, 'c1': True, 'a1': False}
@@ -147,11 +149,12 @@ class ChessInterface:
         self.lastMoveTime = time.time()
         self.movesSinceLastHome = 0
         self.gameEnded = False
-        self.whiteElo = None
-        self.blackElo = -625
-
+        self.whiteElo = 600
+        self.blackElo = 600
+        self.AiLevel=3
         self.enableSound = enableSound
         self.audio = None
+        self.previousButtonValues = [False, False, False, False, False, False]
         if (enableSound):
             if (audioObject != None):
                 self.audio = audioObject
@@ -808,7 +811,25 @@ class ChessInterface:
         
     def handleArcadeButtons(self, isInGame=False):
         # TODO: Caleb - Handle arcade buttons
-        pass
+        for i in range(6):
+            newbuttonvalue = self.physicalBoard.arcadeButtons[i]
+            oldbuttonvalue = self.previousButtonValues[i]
+            self.previousButtonValues[i] = newbuttonvalue
+            if newbuttonvalue and not oldbuttonvalue:
+                if i == 0: #White Interface Minus One
+                    self.AiLevel -= 1
+                    if self.AiLevel < 1:
+                        self.AiLevel = 1
+
+                    WhiteElo = AILEVEL_TO_ELO[self.AiLevel]
+                    self.setWhiteElo(WhiteElo)
+                    self.audio.playTTS("Level " + str(self.AiLevel))
+                if i == 1: #White Interface Plus One
+                    self.AiLevel += 1
+                    if self.AiLevel > 9:
+                        self.AiLevel = 9
+                    WhiteElo = AILEVEL_TO_ELO[self.AiLevel]
+                    self.setWhiteElo(WhiteElo)
 
     def printBoard(self):
         fullPosition = ChessInterface.getBoardPositionDict(self.board)
