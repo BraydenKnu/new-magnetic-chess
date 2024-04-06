@@ -310,13 +310,13 @@ void sendTelemetry() {
         0,
         0,
         digitalRead(PIN_BUTTON_6) == LOW,
-        digitalRead(PIN_BUTTON_5) == LOW,
+        digitalRead(PIN_BUTTON_5) == LOW
       ));
       Serial.print(binToHexCharacter(
         digitalRead(PIN_BUTTON_4) == LOW,
         digitalRead(PIN_BUTTON_3) == LOW,
         digitalRead(PIN_BUTTON_2) == LOW,
-        digitalRead(PIN_BUTTON_1) == LOW,
+        digitalRead(PIN_BUTTON_1) == LOW
       ));
       Serial.println(); // End of message
       break;
