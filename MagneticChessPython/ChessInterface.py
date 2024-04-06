@@ -925,6 +925,9 @@ class ChessInterface:
         # Debugging function to move a piece on the physical board
         self.__movePhysical(physicalMove, sendCommand=sendCommands, useStack=False)
 
+        while not self.physicalBoard.isAllCommandsFinished():
+            self.physicalBoard.update()
+
     def loop(self, sendCommands=True):
         # Main loop
         try:

@@ -76,7 +76,7 @@ class PhysicalBoard:
         self.finalDestinationFileRank = (0, 1) # (file, rank) coordinates
         self.__prevCheckReedSwitches = {}
         self.reedSwitches = {}
-        self.arcadeSwitchCount = [0, 0, 0, 0, 0, 0] # 6 arcade switches
+        self.arcadeSwitches = [False, False, False, False, False, False] # 6 arcade switches
         for fileRank in ALL_SQUARES:
             self.__prevCheckReedSwitches[fileRank] = False
             self.reedSwitches[fileRank] = False
@@ -385,12 +385,12 @@ class PhysicalBoard:
                 print("Arduino error: " + message)
             else:
                 # Message format is:
-                # <Finished/Executing (F/E),<queueCount>,<queueAvailableCount>,<Reed switches (hex)>,<Arcade Switch count since last message (hex)>\n
-                # Example: "F,3,5,c3c3c3c3c3c3c3c300000000,210003\n",
+                # <Finished/Executing (F/E),<queueCount>,<queueAvailableCount>,<Arcade Switch count since last message (hex)>\n
+                # Example: "F,3,5,3f\n",
 
                 splitMessage = message.rstrip('\n\r').split(',')
 
-                if(len(splitMessage) != 5):
+                if(len(splitMessage) != 4):
                     print("Invalid telemetry message: " + message)
                     return
                 
@@ -400,8 +400,8 @@ class PhysicalBoard:
                 self.isArduinoBusy = busy
                 self.arduinoQueueCount = int(splitMessage[1])
                 self.arduinoQueueAvailableCount = int(splitMessage[2])
-                self.setReedSwitchesFromHex(splitMessage[3])
-                self.setArcadeSwitchesFromHex(splitMessage[4])
+                #self.setReedSwitchesFromHex(splitMessage[3])
+                self.setArcadeSwitchesFromHex(splitMessage[3])
             
             # print("Received telemetry: " + message) # Debugging
 
@@ -422,10 +422,14 @@ class PhysicalBoard:
             columnIndex -= 1
     
     def setArcadeSwitchesFromHex(self, hexString):
-        # Sets the 6 arcade switch counts from 6 hex characters
-        # TODO actually code this
+        # Sets the 6 arcade switch values from 2 hex characters
+        if (len(hexString) != 2):
+            print("Invalid arcade switch hex string: " + hexString)
+            return
+        
+        byte = int(hexString, 16)
         for i in range(6):
-            self.arcadeSwitchCount[i] = int(hexString[i], 16)
+            self.arcadeSwitches[i] = PhysicalBoard.testBit(byte, i)
     
     def sendNextCommandIfAvailable(self):
         # Sends next command to the Arduino if it's ready

@@ -15,6 +15,7 @@
 #define PIN_DIR_B 5
 #define PIN_STEP_B 6
 
+/*
 // Multiplexed reed switches
 #define PIN_MUX_SIG 7
 #define PIN_MUX_RANK_S0 A1
@@ -25,6 +26,15 @@
 #define PIN_MUX_FILE_S2 12
 #define PIN_MUX_FILE_S3 11
 #define PIN_ARCADE_BUTTON_SIG 13
+*/
+
+// Arcade Buttons
+#define PIN_BUTTON_1 A1
+#define PIN_BUTTON_2 A2
+#define PIN_BUTTON_3 A3
+#define PIN_BUTTON_4 A4
+#define PIN_BUTTON_5 A5
+#define PIN_BUTTON_6 A6
 
 // Limit switches
 #define PIN_LIM_X 8
@@ -237,6 +247,7 @@ void dequeueCommand() {
   front = newFront;
 }
 
+/*
 bool tempButtonValue;
 void updateSwitchesAndButtons() {
   currentTime = millis();
@@ -266,11 +277,16 @@ void updateSwitchesAndButtons() {
     }
   }
 }
+*/
+
+void updateButtons() {
+  
+}
 
 void sendTelemetry() {
   // Sends portions of the telemetry data.
   // We split it into chunks to avoid sending too much at once, which holds up the rest of our system.
-  if (currentTelemetryChunk >= 10) { // Wrap around to beginning of message.
+  if (currentTelemetryChunk >= 2) { // Wrap around to beginning of message.
     currentTelemetryChunk = 0;
   }
   switch (currentTelemetryChunk) {
@@ -288,42 +304,20 @@ void sendTelemetry() {
       Serial.print(QUEUE_SIZE - count); // Available slots in queue
       break;
     case 2:
-      // Start sending reed switch values in big-endian format (most significant bytes first)
-      Serial.print(',');
-      printReedSwitchValuesFromColumn(11); 
-      printReedSwitchValuesFromColumn(10); 
-      break;
-    case 3:
-      printReedSwitchValuesFromColumn(9);
-      printReedSwitchValuesFromColumn(8);
-      break;
-    case 4:
-      printReedSwitchValuesFromColumn(7);
-      printReedSwitchValuesFromColumn(6);
-      break;
-    case 5:
-      printReedSwitchValuesFromColumn(5);
-      printReedSwitchValuesFromColumn(4);
-      break;
-    case 6:
-      printReedSwitchValuesFromColumn(3);
-      printReedSwitchValuesFromColumn(2);
-      break;
-    case 7:
-      printReedSwitchValuesFromColumn(1);
-      printReedSwitchValuesFromColumn(0);
-      break;
-    case 8:
       // Arcade-style buttons
       Serial.print(',');
-      printArcadeButtonCount(5);
-      printArcadeButtonCount(4);
-      printArcadeButtonCount(3);
-      break;
-    case 9:
-      printArcadeButtonCount(2);
-      printArcadeButtonCount(1);
-      printArcadeButtonCount(0);
+      Serial.print(binToHexCharacter(
+        0,
+        0,
+        digitalRead(PIN_BUTTON_6) == LOW,
+        digitalRead(PIN_BUTTON_5) == LOW,
+      ));
+      Serial.print(binToHexCharacter(
+        digitalRead(PIN_BUTTON_4) == LOW,
+        digitalRead(PIN_BUTTON_3) == LOW,
+        digitalRead(PIN_BUTTON_2) == LOW,
+        digitalRead(PIN_BUTTON_1) == LOW,
+      ));
       Serial.println(); // End of message
       break;
     default:
@@ -516,7 +510,8 @@ void setup() {
   pinMode(PIN_STEP_A, OUTPUT);
   pinMode(PIN_DIR_B, OUTPUT);
   pinMode(PIN_STEP_B, OUTPUT);
-  
+
+  /*
   pinMode(PIN_MUX_SIG, INPUT_PULLUP);
   pinMode(PIN_ARCADE_BUTTON_SIG, INPUT_PULLUP);
 
@@ -527,7 +522,8 @@ void setup() {
   pinMode(PIN_MUX_FILE_S1, OUTPUT);
   pinMode(PIN_MUX_FILE_S2, OUTPUT);
   pinMode(PIN_MUX_FILE_S3, OUTPUT);
-
+  */
+  
   pinMode(PIN_LIM_X, INPUT_PULLUP);
   pinMode(PIN_LIM_Y, INPUT_PULLUP);
   
