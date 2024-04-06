@@ -856,7 +856,7 @@ class ChessInterface:
                 if (currentTime - self.lastReedSwitchUpdate > MOVE_VALIDITY_THRESHOLD):
                     self.move(move, sendCommands=False)
             """
-
+            print(self.physicalBoard.arcadeButtons)
             # Stockfish move
             elo = self.whiteElo if self.board.turn == chess.WHITE else self.blackElo
             move = self.getEngineMove(elo=elo)
@@ -879,6 +879,9 @@ class ChessInterface:
                     if (not success):
                         print("Engine move failed (not possible to do with piece bank).")
                         return True
+            else:
+                print("Engine move failed (no move available).")
+                return True
             
             # Check for game end
             if (self.board.is_game_over()):
@@ -893,7 +896,7 @@ class ChessInterface:
                         self.audio.playSound("gameend")
 
                     self.physicalBoard.enqueueCommand('HPX0000Y0000')
-                
+
                 # Wait for the arduino to finish
                 if (self.physicalBoard.isAllCommandsFinished()):
                     self.state = SETUP_BOARD_AND_PLAYERS
@@ -944,4 +947,3 @@ class ChessInterface:
                 self.texel.quit()
             print("Keyboard interrupt. Exiting.")
             return
-        

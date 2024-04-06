@@ -29,12 +29,12 @@
 */
 
 // Arcade Buttons
-#define PIN_BUTTON_1 A1
-#define PIN_BUTTON_2 A2
-#define PIN_BUTTON_3 A3
-#define PIN_BUTTON_4 A4
-#define PIN_BUTTON_5 A5
-#define PIN_BUTTON_6 A6
+#define PIN_BUTTON_1 A5
+#define PIN_BUTTON_2 A4
+#define PIN_BUTTON_3 A2
+#define PIN_BUTTON_4 11
+#define PIN_BUTTON_5 A1
+#define PIN_BUTTON_6 A3
 
 // Limit switches
 #define PIN_LIM_X 8
@@ -286,7 +286,7 @@ void updateButtons() {
 void sendTelemetry() {
   // Sends portions of the telemetry data.
   // We split it into chunks to avoid sending too much at once, which holds up the rest of our system.
-  if (currentTelemetryChunk >= 2) { // Wrap around to beginning of message.
+  if (currentTelemetryChunk >= 3) { // Wrap around to beginning of message.
     currentTelemetryChunk = 0;
   }
   switch (currentTelemetryChunk) {
@@ -511,6 +511,13 @@ void setup() {
   pinMode(PIN_DIR_B, OUTPUT);
   pinMode(PIN_STEP_B, OUTPUT);
 
+  pinMode(PIN_BUTTON_1, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_2, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_3, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_4, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_5, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_6, INPUT_PULLUP);
+  
   /*
   pinMode(PIN_MUX_SIG, INPUT_PULLUP);
   pinMode(PIN_ARCADE_BUTTON_SIG, INPUT_PULLUP);

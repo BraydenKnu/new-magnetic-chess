@@ -76,7 +76,7 @@ class PhysicalBoard:
         self.finalDestinationFileRank = (0, 1) # (file, rank) coordinates
         self.__prevCheckReedSwitches = {}
         self.reedSwitches = {}
-        self.arcadeSwitches = [False, False, False, False, False, False] # 6 arcade switches
+        self.arcadeButtons = [False, False, False, False, False, False] # 6 arcade switches
         for fileRank in ALL_SQUARES:
             self.__prevCheckReedSwitches[fileRank] = False
             self.reedSwitches[fileRank] = False
@@ -429,7 +429,7 @@ class PhysicalBoard:
         
         byte = int(hexString, 16)
         for i in range(6):
-            self.arcadeSwitches[i] = PhysicalBoard.testBit(byte, i)
+            self.arcadeButtons[i] = PhysicalBoard.testBit(byte, i)
     
     def sendNextCommandIfAvailable(self):
         # Sends next command to the Arduino if it's ready
