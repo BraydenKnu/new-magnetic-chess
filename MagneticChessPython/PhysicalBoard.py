@@ -47,16 +47,41 @@ FILES_BANKS = FILES_BANK1 + FILES_BANK2
 ALL_FILES = FILES_BANKS + FILES_STANDARD
 ALL_SQUARES = [file + rank for file in ALL_FILES for rank in RANKS]
 
+# Calibration values for advanced pathing
 # BANK ----------------------------------------
 # TOP LEFT CORNER: 157, 45
-# TOP RIGHT CORNER: 159, 870
-# BOTTOM LEFT CORNER: 1800, 45
-# BOTTOM RIGHT CORNER: 
-
-BANK_TOP_LEFT_CORNER_X = 155
+BANK_TOP_LEFT_CORNER_X = 157
 BANK_TOP_LEFT_CORNER_Y = 45
+
+# TOP RIGHT CORNER: 159, 870
+BANK_TOP_RIGHT_CORNER_X = 159
+BANK_TOP_RIGHT_CORNER_Y = 870
+
+# BOTTOM LEFT CORNER: 1800, 45
+BANK_BOTTOM_LEFT_CORNER_X = 1800
+BANK_BOTTOM_LEFT_CORNER_Y = 45
+
+# BOTTOM RIGHT CORNER: 1790, 855
+BANK_BOTTOM_RIGHT_CORNER_X = 1790
+BANK_BOTTOM_RIGHT_CORNER_Y = 855
+
+# BOARD ---------------------------------------
+# TOP LEFT CORNER: 145, 1005
 BOARD_TOP_LEFT_CORNER_X = 145
 BOARD_TOP_LEFT_CORNER_Y = 1005
+
+# TOP RIGHT CORNER: 145, 2671
+BOARD_TOP_RIGHT_CORNER_X = 145
+BOARD_TOP_RIGHT_CORNER_Y = 2671
+
+# BOTTOM LEFT CORNER: 1805, 1005
+BOARD_BOTTOM_LEFT_CORNER_X = 1805
+BOARD_BOTTOM_LEFT_CORNER_Y = 1005
+
+# BOTTOM RIGHT CORNER: 1805, 2671
+BOARD_BOTTOM_RIGHT_CORNER_X = 1805
+BOARD_BOTTOM_RIGHT_CORNER_Y = 2671
+
 SQUARE_SIZE = 205.625
 
 SERIAL_BAUD = 115200
@@ -173,7 +198,7 @@ class PhysicalBoard:
     @staticmethod
     def getXY(square): # Takes input like 'f2' or 'w6' and returns xy coordinates
         (file, rank) = PhysicalBoard.getFileRankCoords(square)
-        return PhysicalBoard.getXYFromFileRank((file, rank))
+        return PhysicalBoard.getDistortedXYFromFileRank((file, rank))
 
     @staticmethod
     def getXYFromFileRank(fileRankCoords):
@@ -274,6 +299,86 @@ class PhysicalBoard:
         return path
     
     @staticmethod
+    def getWeightedMidpoint(startXY, endXY, ratio=0.5):
+        # Returns the weighted midpoint between two points, where ratio is how much closer to the second point it is, between 0 and 1.
+        (startX, startY) = startXY
+        (endX, endY) = endXY
+        midX = (1-ratio) * startX + ratio * endX
+        midY = (1-ratio) * startY + ratio * endY
+        return (midX, midY)
+    
+    @staticmethod
+    def getDistortedXY(squaresFromLowerLeftCorner, topLeftXY, topRightXY, bottomLeftXY, bottomRightXY, numFiles=8, numRanks=8):
+        # Returns the distorted coordinates of a square on the board, given the relative number of squares from the lower left corner in both dimensions.
+        (squaresX, squaresY) = squaresFromLowerLeftCorner
+
+        ratioX = (squaresX / numFiles)
+        ratioY = 1 - (squaresY / numRanks)
+
+        topMidpoint = PhysicalBoard.getWeightedMidpoint(topLeftXY, topRightXY, ratioX)
+        bottomMidpoint = PhysicalBoard.getWeightedMidpoint(bottomLeftXY, bottomRightXY, ratioX)
+        distortedXY = PhysicalBoard.getWeightedMidpoint(topMidpoint, bottomMidpoint, ratioY)
+        return distortedXY
+
+    @staticmethod
+    def getDistortedXYFromFileRank(fileRank):
+        # Returns the distorted coordinates of a square on the board, given the file/rank coordinates.
+        (file, rank) = fileRank
+        if (file < 0):
+            topLeftXY = (BANK_TOP_LEFT_CORNER_X, BANK_TOP_LEFT_CORNER_Y)
+            topRightXY = (BANK_TOP_RIGHT_CORNER_X, BANK_TOP_RIGHT_CORNER_Y)
+            bottomLeftXY = (BANK_BOTTOM_LEFT_CORNER_X, BANK_BOTTOM_LEFT_CORNER_Y)
+            bottomRightXY = (BANK_BOTTOM_RIGHT_CORNER_X, BANK_BOTTOM_RIGHT_CORNER_Y)
+            numFiles = 4
+            relativeSquareCount = (file + 5.5, rank - 0.5)
+        else:
+            topLeftXY = (BOARD_TOP_LEFT_CORNER_X, BOARD_TOP_LEFT_CORNER_Y)
+            topRightXY = (BOARD_TOP_RIGHT_CORNER_X, BOARD_TOP_RIGHT_CORNER_Y)
+            bottomLeftXY = (BOARD_BOTTOM_LEFT_CORNER_X, BOARD_BOTTOM_LEFT_CORNER_Y)
+            bottomRightXY = (BOARD_BOTTOM_RIGHT_CORNER_X, BOARD_BOTTOM_RIGHT_CORNER_Y)
+            numFiles = 8
+            relativeSquareCount = (file + 0.5, rank - 0.5)
+        
+        return PhysicalBoard.getDistortedXY(relativeSquareCount, topLeftXY, topRightXY, bottomLeftXY, bottomRightXY, numFiles=numFiles, numRanks=8)
+
+    @staticmethod
+    def getPathAdvanced(start, end, direct=False, includeStart=True):
+        """
+        Gets a path from start to end that is garunteed not to cross any other squares (unless direct is True).
+
+        start and end are in the form of 'f2' or 'w6'.
+        direct: If True, the path will only include the start and end squares.
+        includeStart: If True, the start square will be included in the path.
+
+        Example path:
+        + - + - + - + - + - +
+        :   :   :   :[E]:   :
+        + - + - + - 4 - + - +
+        :   :   :   ^   :   :
+        + - 1-->2-->3 - + - +
+        :[S]:   :   :   :   :
+        + - + - + - + - + - +
+        """
+        path = []
+        (startFile, startRank) = PhysicalBoard.getFileRankCoords(start)
+        (endFile, endRank) = PhysicalBoard.getFileRankCoords(end)
+
+        if (includeStart):
+            path.append((startFile, startRank))
+        
+        # Ensure start != end
+        if (startFile == endFile and startRank == endRank):
+            return path
+
+        if (direct):
+            path.append((endFile, endRank))
+        else:
+            # Waypoints are defined for every square corner (intersection) we hit.
+            waypoints = []
+            
+        
+    
+    @staticmethod
     def buildCommand(x, y, magnetUp, optimizeRoute):
         x = int(x)
         y = int(y)
@@ -296,7 +401,7 @@ class PhysicalBoard:
         for pathIndex in range(len(path)):
             isFirstCommand = (pathIndex == 0)
             isLastCommand = (pathIndex + 1 == len(path))
-            (x, y) = PhysicalBoard.getXYFromFileRank(path[pathIndex])
+            (x, y) = PhysicalBoard.getDistortedXYFromFileRank(path[pathIndex])
 
             if (direct):
                 commands.append(PhysicalBoard.buildCommand(x, y, magnetUp=((not isFirstCommand or not includeStart) and useMagnetWithDirect), optimizeRoute=False))

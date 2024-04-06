@@ -72,6 +72,9 @@ ALL_FILES = FILES_STANDARD + FILES_BANKS
 SETUP_BOARD_AND_PLAYERS = 0
 PLAYING_GAME = 1
 
+# Configuration
+OVERLOAD_PRESS_COUNT = 20 # Number of presses at max before the AI level is increased to DEFCON 4
+
 # detect whether we're on windows or linux
 STOCKFISH_PATHS = {
     'windows': '..\\stockfish-16-windows\\stockfish-windows-x86-64-avx2.exe',
@@ -151,7 +154,12 @@ class ChessInterface:
         self.gameEnded = False
         self.whiteElo = 600
         self.blackElo = 600
-        self.AiLevel=3
+
+        self.WhiteAiLevel=3
+        self.BlackAiLevel=3
+        self.WhiteOverloadCounter=0
+        self.BlackOverloadCounter=0
+
         self.enableSound = enableSound
         self.audio = None
         self.previousButtonValues = [False, False, False, False, False, False]
@@ -809,28 +817,89 @@ class ChessInterface:
         
         self.setBoardFEN(chess.STARTING_FEN, sendCommands=sendCommands, errorCheckUsingReedSwitches=errorCheckUsingReedSwitches)
         
-    def handleArcadeButtons(self, isInGame=False):
-        # TODO: Caleb - Handle arcade buttons
+    def handleArcadeButtons(self):
         for i in range(6):
             newbuttonvalue = self.physicalBoard.arcadeButtons[i]
             oldbuttonvalue = self.previousButtonValues[i]
             self.previousButtonValues[i] = newbuttonvalue
             if newbuttonvalue and not oldbuttonvalue:
                 if i == 0: #White Interface Minus One
-                    self.AiLevel -= 1
-                    if self.AiLevel < 1:
-                        self.AiLevel = 1
+                    self.WhiteOverloadCounter = 0
 
-                    WhiteElo = AILEVEL_TO_ELO[self.AiLevel]
+                    self.WhiteAiLevel -= 1
+                    if self.WhiteAiLevel < 1:
+                        self.WhiteAiLevel = 1
+
+                    WhiteElo = AILEVEL_TO_ELO[self.WhiteAiLevel]
                     self.setWhiteElo(WhiteElo)
-                    self.audio.playTTS("Level " + str(self.AiLevel))
+                    self.audio.playTTS("White Level " + str(self.WhiteAiLevel))
+                    print("White Level " + str(self.WhiteAiLevel) + " - " + str(WhiteElo) + " Elo")
+                
                 if i == 1: #White Interface Plus One
-                    self.AiLevel += 1
-                    if self.AiLevel > 9:
-                        self.AiLevel = 9
-                    WhiteElo = AILEVEL_TO_ELO[self.AiLevel]
-                    self.setWhiteElo(WhiteElo)
+                    self.WhiteAiLevel += 1
+                    if self.WhiteAiLevel > 9:
+                        self.WhiteAiLevel = 9
+                        self.WhiteOverloadCounter += 1
+                    
+                    if self.WhiteOverloadCounter >= OVERLOAD_PRESS_COUNT:
+                        self.WhiteAiLevel = 10
+                    
+                    if self.WhiteOverloadCounter == OVERLOAD_PRESS_COUNT: # Run on first time we exceed this
+                        self.audio.playTTS("Warning, approaching def con four. You are screwed", important=True)
+                        time.sleep(3)
+                        self.audio.playSound("siren")
+                    elif self.WhiteOverloadCounter < OVERLOAD_PRESS_COUNT:
+                        self.audio.playTTS("White Level " + str(self.WhiteAiLevel))
 
+                    WhiteElo = AILEVEL_TO_ELO[self.WhiteAiLevel]
+                    self.setWhiteElo(WhiteElo)
+                    print("White Level " + str(self.WhiteAiLevel) + " - " + str(WhiteElo) + " Elo")
+                
+                if i == 2: #Start game
+                    self.state = PLAYING_GAME
+                    self.gameEnded = False
+                    self.audio.playSound("gamestart")
+                    self.audio.playTTS("Game started")
+                    print("Game started")
+                
+                if i == 3: #Reset board
+                    self.resetBoard()
+                    self.audio.playSound("gameend")
+                    self.audio.playTTS("Resetting board")
+                    print("Resetting board")
+
+                if i == 4: #Black Interface Plus One
+                    self.BlackAiLevel += 1
+                    if self.BlackAiLevel > 9:
+                        self.BlackAiLevel = 9
+                        self.BlackOverloadCounter += 1
+                    
+                    if self.BlackOverloadCounter >= OVERLOAD_PRESS_COUNT:
+                        self.BlackAiLevel = 10
+                    
+                    if self.BlackOverloadCounter == OVERLOAD_PRESS_COUNT: # Run on first time we exceed this
+                        self.audio.playTTS("Warning, approaching def con four. You are screwed", important=True)
+                        time.sleep(3)
+                        self.audio.playSound("siren")
+                    elif self.BlackOverloadCounter < OVERLOAD_PRESS_COUNT:
+                        self.audio.playTTS("Black Level " + str(self.BlackAiLevel))
+
+                    BlackElo = AILEVEL_TO_ELO[self.BlackAiLevel]
+                    self.setBlackElo(BlackElo)
+                    print("Black Level " + str(self.BlackAiLevel) + " - " + str(BlackElo) + " Elo")
+
+                if i == 5: #Black Interface Minus One
+                    self.BlackOverloadCounter = 0
+
+                    self.BlackAiLevel -= 1
+                    if self.BlackAiLevel < 1:
+                        self.BlackAiLevel = 1
+
+                    BlackElo = AILEVEL_TO_ELO[self.BlackAiLevel]
+                    self.setBlackElo(BlackElo)
+                    self.audio.playTTS("Black Level " + str(self.BlackAiLevel))
+                    print("Black Level " + str(self.BlackAiLevel) + " - " + str(BlackElo) + " Elo")
+                    
     def printBoard(self):
         fullPosition = ChessInterface.getBoardPositionDict(self.board)
         for rank in reversed(RANKS):
@@ -859,10 +928,12 @@ class ChessInterface:
             self.resetBoard(sendCommands=sendCommands, errorCheckUsingReedSwitches=False)
             
             # Setup board and players
-            self.handleArcadeButtons(isInGame=False)
+            self.handleArcadeButtons()
+            """
             if (not self.physicalBoard.isAllCommandsFinished()):
                 self.state = PLAYING_GAME # TODO: DEBUG - REMOVE THIS LINE
                 self.gameEnded = False
+            """
         elif (self.state == PLAYING_GAME):
             # Play the game
             # self.updatePhysicalMoveInProgress()
@@ -877,7 +948,7 @@ class ChessInterface:
                 if (currentTime - self.lastReedSwitchUpdate > MOVE_VALIDITY_THRESHOLD):
                     self.move(move, sendCommands=False)
             """
-            print(self.physicalBoard.arcadeButtons)
+
             # Stockfish move
             elo = self.whiteElo if self.board.turn == chess.WHITE else self.blackElo
             move = self.getEngineMove(elo=elo)
@@ -959,12 +1030,8 @@ class ChessInterface:
             while not gameOver:
                 gameOver = self.update(sendCommands=sendCommands)
         except KeyboardInterrupt:
-            self.physicalBoard.close()
-            if (self.enableSound):
-                self.audio.close()
-            if (self.stockfish != None):
-                self.stockfish.quit()
-            if (self.texel != None):
-                self.texel.quit()
-            print("Keyboard interrupt. Exiting.")
+            print("Keyboard interrupt.")
+            self.board = chess.Board(chess.STARTING_FEN) # Reset the virtual board
+            while not self.physicalBoard.isAllCommandsFinished(): # Finish any ongoing commands
+                self.physicalBoard.update()
             return

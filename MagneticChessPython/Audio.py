@@ -18,6 +18,7 @@ AUDIO_WPM = 150
 
 NON_TTS_AUDIO = {
     'boot': 'Windows XP Startup.wav',
+    'siren': 'Tornado_Siren.wav',
     'move': 'move-self.wav',
     'check': 'move-check.wav',
     'capture': 'capture.wav',
@@ -38,6 +39,7 @@ class Audio:
         self.mixer.set_num_channels(MAX_CHANNELS)
 
         self.engine = None
+        self.importantEngine = None
 
         self.thread = Thread(target=self.__startEngine)
         self.thread.daemon = True
@@ -50,6 +52,8 @@ class Audio:
     def __del__(self):
         self.engine.endLoop()
         self.engine.stop()
+        self.importantEngine.endLoop()
+        self.importantEngine.stop()
         self.mixer.quit()
 
     def __startEngine(self):
@@ -84,15 +88,15 @@ class Audio:
         
         self.__playSoundObject(self.sounds[sound])
 
-    def playTTS(self, text):
+    def playTTS(self, text, important=False):
         if not text:
             return
         
-        start_time = time.time()
+        busy = self.engine.isBusy()
+        if busy:
+            return
+        
         self.engine.say(text)
-
-        after_play = time.time()
-        print("Time to play: " + str(after_play - start_time))
 
     def stopAllSounds(self):
         self.mixer.stop()

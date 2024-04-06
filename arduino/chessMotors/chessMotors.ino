@@ -29,11 +29,11 @@
 */
 
 // Arcade Buttons
-#define PIN_BUTTON_1 A5
-#define PIN_BUTTON_2 A4
-#define PIN_BUTTON_3 A2
+#define PIN_BUTTON_1 A1
+#define PIN_BUTTON_2 A2
+#define PIN_BUTTON_3 A4
 #define PIN_BUTTON_4 11
-#define PIN_BUTTON_5 A1
+#define PIN_BUTTON_5 A5
 #define PIN_BUTTON_6 A3
 
 // Limit switches
