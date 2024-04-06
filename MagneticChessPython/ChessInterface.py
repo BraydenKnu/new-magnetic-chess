@@ -921,6 +921,10 @@ class ChessInterface:
         (x, y) = self.physicalBoard.getXYFromFileRank(fileRank)
         self.goTo(x, y, magnetUp=magnetUp, home=home)
     
+    def debugMove(self, physicalMove, sendCommands=True):
+        # Debugging function to move a piece on the physical board
+        self.__movePhysical(physicalMove, sendCommand=sendCommands, useStack=False)
+
     def loop(self, sendCommands=True):
         # Main loop
         try:
