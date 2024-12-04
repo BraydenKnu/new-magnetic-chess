@@ -845,8 +845,8 @@ class ChessInterface:
                         self.WhiteAiLevel = 10
                     
                     if self.WhiteOverloadCounter == OVERLOAD_PRESS_COUNT: # Run on first time we exceed this
-                        self.audio.playTTS("Warning, approaching def con four. You are screwed", important=True)
-                        time.sleep(3)
+                        #self.audio.playTTS("Warning, approaching def con four. You are screwed", important=True)
+                        #time.sleep(3)
                         self.audio.playSound("siren")
                     elif self.WhiteOverloadCounter < OVERLOAD_PRESS_COUNT:
                         self.audio.playTTS("White Level " + str(self.WhiteAiLevel))

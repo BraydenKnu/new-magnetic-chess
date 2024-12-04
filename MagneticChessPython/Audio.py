@@ -97,6 +97,18 @@ class Audio:
             return
         
         self.engine.say(text)
+        """
+        # Save to wav
+        filename = slugify(text) + '.wav'
+        filename = BASE_TTS_PATH + filename
+        if os.path.exists(filename):
+            sound = self.mixer.Sound(filename)
+        else:
+            soundFile = self.engine.saveToFile(text, filename)
+            sound = self.mixer.Sound(soundFile)
+        
+        self.__playSoundObject(sound)
+        """
 
     def stopAllSounds(self):
         self.mixer.stop()
