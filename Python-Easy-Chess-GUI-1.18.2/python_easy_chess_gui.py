@@ -79,7 +79,7 @@ ico_path = {
 BANK_OFFSET = 5 # Shift bank towards white's left side of the board. Unshifted covers white's left half of the board.
 
 MIN_DEPTH = 1
-MAX_DEPTH = 1000
+MAX_DEPTH = 15
 MANAGED_UCI_OPTIONS = ['ponder', 'uci_chess960', 'multipv', 'uci_analysemode',
                        'ownbook']
 GUI_THEME = ['Green', 'GreenTan', 'LightGreen', 'BluePurple', 'Purple',
@@ -102,6 +102,8 @@ ROOKW = 10
 KINGW = 11
 QUEENW = 12
 
+ALL_PIECES = [PAWNB, KNIGHTB, BISHOPB, ROOKB, KINGB, QUEENB,
+              PAWNW, KNIGHTW, BISHOPW, ROOKW, KINGW, QUEENW]
 
 # Absolute rank based on real chess board, white at bottom, black at the top.
 # This is also the rank mapping used by python-chess modules.
@@ -114,6 +116,13 @@ RANK_3 = 2
 RANK_2 = 1
 RANK_1 = 0
 
+# Each side gets these pieces
+NUM_PAWNS = 8
+NUM_KNIGHTS = 2
+NUM_BISHOPS = 2
+NUM_ROOKS = 2
+NUM_QUEENS = 2
+NUM_KINGS = 1
 
 initial_bank =  [[BLANK, QUEENW, QUEENB, BLANK],
                  [BLANK, BLANK,  BLANK,  BLANK],
@@ -124,6 +133,14 @@ initial_bank =  [[BLANK, QUEENW, QUEENB, BLANK],
                  [BLANK, BLANK,  BLANK,  BLANK],
                  [BLANK, BLANK,  BLANK,  BLANK]]
 
+bank_layout =   [[PAWNW, QUEENW,  QUEENB,  PAWNB],
+                 [PAWNW, QUEENW,  QUEENB,  PAWNB],
+                 [PAWNW, ROOKW,   ROOKB,   PAWNB],
+                 [PAWNW, ROOKW,   ROOKB,   PAWNB],
+                 [PAWNW, BISHOPW, BISHOPB, PAWNB],
+                 [PAWNW, BISHOPW, BISHOPB, PAWNB],
+                 [PAWNW, KNIGHTW, KNIGHTB, PAWNB],
+                 [PAWNW, KNIGHTW, KNIGHTB, PAWNB]]
 
 initial_board = [[ROOKB, KNIGHTB, BISHOPB, QUEENB, KINGB, BISHOPB, KNIGHTB, ROOKB],
                  [PAWNB, ] * 8,
@@ -709,10 +726,10 @@ class EasyChessGui:
         self.human_period_moves = 0
         self.human_tc_type = 'fischer'
 
-        self.engine_base_time_ms = 3 * 60 * 1000  # 5 minutes
-        self.engine_inc_time_ms = 2 * 1000  # 10 seconds
+        self.engine_base_time_ms = 500  # 0.5 seconds
+        self.engine_inc_time_ms = 0 * 1000  # 0 seconds
         self.engine_period_moves = 0
-        self.engine_tc_type = 'fischer'
+        self.engine_tc_type = 'timepermove'
 
         # Default board color is purple
         self.sq_light_color = '#FFFFFF'
@@ -1447,6 +1464,7 @@ class EasyChessGui:
             old_r = r
 
         self.psg_board = psgboard
+        self.update_bank_from_board()
         self.redraw_board(window)
 
     def change_square_color(self, window, row, col):
@@ -1493,12 +1511,24 @@ class EasyChessGui:
         :param window:
         :return:
         """
+
+        # Board
         for i in range(8):
             for j in range(8):
                 color = self.sq_dark_color if (i + j) % 2 else \
                         self.sq_light_color
                 piece_image = images[self.psg_board[i][j]]
                 elem = window.find_element(key=(i, j))
+                elem.Update(button_color=('white', color),
+                            image_filename=piece_image, )
+        
+        # Bank
+        for i in range(8):
+            for j in range(4):
+                color = self.sq_dark_color if (i + j) % 2 else \
+                        self.sq_light_color
+                piece_image = images[self.psg_bank[i][j]]
+                elem = window.find_element(key=(i, j - BANK_OFFSET))
                 elem.Update(button_color=('white', color),
                             image_filename=piece_image, )
 
@@ -1581,6 +1611,7 @@ class EasyChessGui:
 
         self.psg_board[self.get_row(fr)][self.get_col(fr)] = BLANK
         self.psg_board[self.get_row(to)][self.get_col(to)] = pc
+        self.update_bank_from_board()
         self.redraw_board(window)
 
     def update_ep(self, window, move, stm):
@@ -1599,6 +1630,7 @@ class EasyChessGui:
             capture_sq = to + 8
 
         self.psg_board[self.get_row(capture_sq)][self.get_col(capture_sq)] = BLANK
+        self.update_bank_from_board()
         self.redraw_board(window)
 
     def get_promo_piece(self, move, stm, human):
@@ -1645,6 +1677,42 @@ class EasyChessGui:
 
         return pyc_promo, psg_promo
 
+    def update_bank_from_board(self):
+        # Updates the bank using the board
+        
+        piece_counts = {}
+
+        # 1. count each type of piece
+        for i in range(8):
+            for j in range(8):
+                piece = self.psg_board[i][j]
+                if piece in piece_counts:
+                    piece_counts[piece] += 1
+                else:
+                    piece_counts[piece] = 1
+
+        # 2. find how many of each piece should be in the bank
+        to_bank = {}
+
+        to_bank[PAWNW] = NUM_PAWNS - piece_counts.get(PAWNW, 0)
+        to_bank[KNIGHTW] = NUM_KNIGHTS - piece_counts.get(KNIGHTW, 0)
+        to_bank[BISHOPW] = NUM_BISHOPS - piece_counts.get(BISHOPW, 0)
+        to_bank[ROOKW] = NUM_ROOKS - piece_counts.get(ROOKW, 0)
+        to_bank[QUEENW] = NUM_QUEENS - piece_counts.get(QUEENW, 0)
+
+        to_bank[PAWNB] = NUM_PAWNS - piece_counts.get(PAWNB, 0)
+        to_bank[KNIGHTB] = NUM_KNIGHTS - piece_counts.get(KNIGHTB, 0)
+        to_bank[BISHOPB] = NUM_BISHOPS - piece_counts.get(BISHOPB, 0)
+        to_bank[ROOKB] = NUM_ROOKS - piece_counts.get(ROOKB, 0)
+        to_bank[QUEENB] = NUM_QUEENS - piece_counts.get(QUEENB, 0)
+
+        # 3. update the bank
+        for i in range(8):
+            for j in range(4):
+                current_type = bank_layout[i][j]
+                if to_bank[current_type] > 0:
+                    self.psg_bank[i][j] = current_type
+                    to_bank[current_type] -= 1
     def set_depth_limit(self):
         """ Returns max depth based from user setting """
         user_depth = sg.PopupGetText(
@@ -2114,6 +2182,7 @@ class EasyChessGui:
                                     # Place piece in the move to_square
                                     self.psg_board[to_row][to_col] = piece
 
+                                self.update_bank_from_board()
                                 self.redraw_board(window)
 
                                 board.push(user_move)
@@ -2339,6 +2408,7 @@ class EasyChessGui:
                     # Place piece in the move to_square
                     self.psg_board[to_row][to_col] = piece
 
+                self.update_bank_from_board()
                 self.redraw_board(window)
 
                 board.push(best_move)
@@ -2483,16 +2553,16 @@ class EasyChessGui:
             end_rank = 8
             step_rank = 1
             
-            start_file = 0 - BANK_OFFSET
-            end_file = 4 - BANK_OFFSET
+            start_file = 0
+            end_file = 4
             step_file = 1
         else:
             start_rank = 7
             end_rank = -1
             step_rank = -1
 
-            start_file = 3 - BANK_OFFSET
-            end_file = -1 - BANK_OFFSET
+            start_file = 3
+            end_file = -1
             step_file = -1
             file_char_name = file_char_name[::-1]
 
@@ -2501,8 +2571,8 @@ class EasyChessGui:
             # Row numbers at left of board is blank
             row = []
             for j in range(start_file, end_file, step_file):
-                piece_image = images[self.psg_bank[i][j + BANK_OFFSET]]
-                row.append(self.render_square(piece_image, key=(i, j), location=(i, j)))
+                piece_image = images[self.psg_bank[i][j]]
+                row.append(self.render_square(piece_image, key=(i, j - BANK_OFFSET), location=(i, j)))
             board_layout.append(row)
 
         return board_layout
@@ -2615,11 +2685,18 @@ class EasyChessGui:
 
         self.menu_elem = sg.Menu(menu_def_neutral, tearoff=False)
 
-        # White board layout, mode: Neutral
-        layout = [
-                [self.menu_elem],
-                [sg.Column(bank_tab), sg.Column(board_tab), sg.Column(board_controls)]
-        ]
+        if is_user_white:
+            # White board layout, mode: Neutral
+            layout = [
+                    [self.menu_elem],
+                    [sg.Column(bank_tab), sg.Column(board_tab), sg.Column(board_controls)]
+            ]
+        else:
+            # Black board layout, mode: Neutral
+            layout = [
+                    [self.menu_elem],
+                    [sg.Column(board_tab), sg.Column(bank_tab), sg.Column(board_controls)]
+            ]
 
         return layout
 
@@ -3655,6 +3732,7 @@ class EasyChessGui:
                     window.find_element('_gamestatus_').Update('Mode     Neutral')
 
                     self.psg_board = copy.deepcopy(initial_board)
+                    self.update_bank_from_board()
                     self.redraw_board(window)
                     board = chess.Board()
                     self.set_new_game()
