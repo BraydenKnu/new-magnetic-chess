@@ -7,7 +7,6 @@ PLAYING_GAME = 1
 from ChessInterface import ChessInterface
 interface = ChessInterface()
 
-"""
 programmer_input = "illegal command"
 while programmer_input != "":
     programmer_input = input("Press Enter to start. Type c to config. Type s to start immediately without user input.")
@@ -32,6 +31,5 @@ while programmer_input != "":
         interface.gameEnded = False
         interface.state = PLAYING_GAME
         break
-"""
 
 interface.loop()

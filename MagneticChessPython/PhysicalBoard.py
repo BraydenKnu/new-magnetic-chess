@@ -35,8 +35,8 @@ WINDOWS = 2 # Windows OS
 import os
 current_os = WINDOWS if (os.name == 'nt') else LINUX # Detect whether we're on Windows or Linux
 import time
-if (current_os == LINUX):
-    import serial
+import serial
+import serial.tools.list_ports
 
 # Constants
 RANKS = "12345678"
@@ -50,42 +50,42 @@ ALL_SQUARES = [file + rank for file in ALL_FILES for rank in RANKS]
 # Calibration values for advanced pathing
 # BANK ----------------------------------------
 # TOP LEFT CORNER: 157, 45
-BANK_TOP_LEFT_CORNER_X = 157
-BANK_TOP_LEFT_CORNER_Y = 45
+BANK_TOP_LEFT_CORNER_X = 1870
+BANK_TOP_LEFT_CORNER_Y = 3037
 
 # TOP RIGHT CORNER: 159, 870
-BANK_TOP_RIGHT_CORNER_X = 159
-BANK_TOP_RIGHT_CORNER_Y = 870
+BANK_TOP_RIGHT_CORNER_X = 1870
+BANK_TOP_RIGHT_CORNER_Y = 2127
 
 # BOTTOM LEFT CORNER: 1800, 45
-BANK_BOTTOM_LEFT_CORNER_X = 1800
-BANK_BOTTOM_LEFT_CORNER_Y = 45
+BANK_BOTTOM_LEFT_CORNER_X = 30
+BANK_BOTTOM_LEFT_CORNER_Y = 3037
 
 # BOTTOM RIGHT CORNER: 1790, 855
-BANK_BOTTOM_RIGHT_CORNER_X = 1790
-BANK_BOTTOM_RIGHT_CORNER_Y = 855
+BANK_BOTTOM_RIGHT_CORNER_X = 30
+BANK_BOTTOM_RIGHT_CORNER_Y = 2127
 
 # BOARD ---------------------------------------
 # TOP LEFT CORNER: 145, 1005
-BOARD_TOP_LEFT_CORNER_X = 145
-BOARD_TOP_LEFT_CORNER_Y = 1005
+BOARD_TOP_LEFT_CORNER_X = 30
+BOARD_TOP_LEFT_CORNER_Y = 1900
 
 # TOP RIGHT CORNER: 145, 2671
-BOARD_TOP_RIGHT_CORNER_X = 145
-BOARD_TOP_RIGHT_CORNER_Y = 2671
+BOARD_TOP_RIGHT_CORNER_X = 1870
+BOARD_TOP_RIGHT_CORNER_Y = 80
 
 # BOTTOM LEFT CORNER: 1805, 1005
-BOARD_BOTTOM_LEFT_CORNER_X = 1805
-BOARD_BOTTOM_LEFT_CORNER_Y = 1005
+BOARD_BOTTOM_LEFT_CORNER_X = 30
+BOARD_BOTTOM_LEFT_CORNER_Y = 1900
 
 # BOTTOM RIGHT CORNER: 1805, 2671
-BOARD_BOTTOM_RIGHT_CORNER_X = 1805
-BOARD_BOTTOM_RIGHT_CORNER_Y = 2671
+BOARD_BOTTOM_RIGHT_CORNER_X = 30
+BOARD_BOTTOM_RIGHT_CORNER_Y = 80
 
-SQUARE_SIZE = 205.625
+SQUARE_SIZE = 227.5
 
 SERIAL_BAUD = 115200
-USB_INTERFACES = [
+LINUX_USB_INTERFACES = [
     '/dev/ttyUSB0',
     '/dev/ttyUSB1',
     '/dev/ttyUSB2',
@@ -109,12 +109,9 @@ class PhysicalBoard:
         for fileRank in ALL_SQUARES:
             self.__prevCheckReedSwitches[fileRank] = False
             self.reedSwitches[fileRank] = False
-        
-        if (current_os == LINUX):
-            self.arduino = self.beginSerial()
-            self.home() # Home motors after connecting
-        else:
-            self.arduino = None
+
+        self.arduino = self.beginSerial()
+        self.home() # Home motors after connecting
 
     @staticmethod
     def getFileRankCoords(square):
@@ -440,22 +437,46 @@ class PhysicalBoard:
         # Open serial connection to Arduino
         connected = False
         trying_interface = 0
-        while (not connected):
-            try:
-                print("Looking for Arduino on USB" + str(trying_interface) + "...")
-                arduino = serial.Serial(USB_INTERFACES[trying_interface], SERIAL_BAUD, timeout=1)
-                arduino.flush()
-                connected = True
-            except serial.SerialException as e:
-                print("Error connecting to Arduino. Retrying...")
-                time.sleep(0.2)
+        if (current_os == LINUX):
+            while (not connected):
+                try:
+                    print("Looking for Arduino on USB" + str(trying_interface) + "...")
+                    arduino = serial.Serial(LINUX_USB_INTERFACES[trying_interface], SERIAL_BAUD, timeout=1)
+                    arduino.flush()
+                    connected = True
+                except serial.SerialException as e:
+                    print("Error connecting to Arduino. Retrying...")
+                    time.sleep(0.2)
 
-                trying_interface += 1
-                if trying_interface >= len(USB_INTERFACES):
-                    trying_interface = 0
+                    trying_interface += 1
+                    if trying_interface >= len(LINUX_USB_INTERFACES):
+                        trying_interface = 0
 
-        print("Connected to Arduino on " + USB_INTERFACES[trying_interface])
-        arduino.flush()
+            print("Connected to Arduino on " + LINUX_USB_INTERFACES[trying_interface])
+            arduino.flush()
+        else: # OS is Windows
+            while (not connected):
+                try:
+                    ports = serial.tools.list_ports.comports()
+                    device = None
+                    for port in ports:
+                        if 'CH340' in port.description: # Arduino chip
+                            device = port
+                            break
+                    if device:
+                        print("Looking for Arduino on " + device.name)
+                        arduino = serial.Serial(device.name, SERIAL_BAUD, timeout=1)
+                        arduino.flush()
+                        connected = True
+                    else:
+                        raise serial.SerialException()
+                except serial.SerialException as e:
+                    print("Error connecting to Arduino. Retrying...")
+                    time.sleep(0.2)
+
+            print("Connected to Arduino on " + device.name)
+            arduino.flush()
+
         return arduino
 
     def receiveTelemetry(self):
@@ -499,7 +520,7 @@ class PhysicalBoard:
 
                 splitMessage = message.rstrip('\n\r').split(',')
 
-                if(len(splitMessage) != 4):
+                if(len(splitMessage) != 3):
                     print("Invalid telemetry message: " + message)
                     return
                 
@@ -510,7 +531,7 @@ class PhysicalBoard:
                 self.arduinoQueueCount = int(splitMessage[1])
                 self.arduinoQueueAvailableCount = int(splitMessage[2])
                 #self.setReedSwitchesFromHex(splitMessage[3])
-                self.setArcadeSwitchesFromHex(splitMessage[3])
+                #self.setArcadeSwitchesFromHex(splitMessage[3])
             
             # print("Received telemetry: " + message) # Debugging
 
@@ -581,6 +602,59 @@ class PhysicalBoard:
         self.enqueueCommand(HOME_COMMAND) # Send home command
         self.sendNextCommandIfAvailable()
 
+    def motorTestRun(self):
+        self.moveWithoutMagnet('h1', 'h1') # Starting square
+
+        # Rectangle around the board
+        self.movePiece('h1', 'w1', True)
+        time.sleep(1)
+        self.movePiece('w1', 'w8', True)
+        time.sleep(1)
+        self.movePiece('w8', 'h8', True)
+        time.sleep(1)
+        self.movePiece('h8', 'h1', True)
+        time.sleep(1)
+
+        # Back and forth, horizontal
+        self.movePiece('h1', 'w2')
+        self.movePiece('w2', 'h2', True)
+        self.movePiece('h2', 'w3')
+        self.movePiece('w3', 'h3', True)
+        self.movePiece('h3', 'w4')
+        self.movePiece('w4', 'h4', True)
+        self.movePiece('h4', 'w5')
+        self.movePiece('w5', 'h5', True)
+        self.movePiece('h5', 'w6')
+        self.movePiece('w6', 'h6', True)
+        self.movePiece('h6', 'w7')
+        self.movePiece('w7', 'h7', True)
+        self.movePiece('h7', 'w8')
+        time.sleep(1)
+
+        # Back and forth, vertical
+        self.movePiece('w8', 'x1')
+        self.movePiece('x1', 'x8', True)
+        self.movePiece('x8', 'y1')
+        self.movePiece('y1', 'y8', True)
+        self.movePiece('y8', 'z1')
+        self.movePiece('z1', 'z8', True)
+        self.movePiece('z8', 'a1')
+        self.movePiece('a1', 'a8', True)
+        self.movePiece('a8', 'b1')
+        self.movePiece('b1', 'b8', True)
+        self.movePiece('b8', 'c1')
+        self.movePiece('c1', 'c8', True)
+        self.movePiece('c8', 'd1')
+        self.movePiece('d1', 'd8', True)
+        self.movePiece('d8', 'e1')
+        self.movePiece('e1', 'e8', True)
+        self.movePiece('e8', 'f1')
+        self.movePiece('f1', 'f8', True)
+        self.movePiece('f8', 'g1')
+        self.movePiece('g1', 'g8', True)
+        self.movePiece('g8', 'h1')
+
+
     def getModifiedReedSwitches(self):
         # Compare current state to state from last check to see what the user changed.
         modifiedReedSwitches = {}
@@ -589,4 +663,3 @@ class PhysicalBoard:
                 modifiedReedSwitches[square] = self.reedSwitches[square]
 
         return modifiedReedSwitches
-    

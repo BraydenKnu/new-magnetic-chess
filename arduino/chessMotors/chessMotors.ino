@@ -9,11 +9,11 @@
 #define BIT7 0x80
 
 // Stepper drivers
-#define PIN_EN_MOTORS 2
-#define PIN_DIR_A 3
-#define PIN_STEP_A 4
-#define PIN_DIR_B 5
-#define PIN_STEP_B 6
+#define PIN_EN_MOTORS 12
+#define PIN_DIR_A 8
+#define PIN_STEP_A 9
+#define PIN_DIR_B 11                                  
+#define PIN_STEP_B 10
 
 /*
 // Multiplexed reed switches
@@ -28,6 +28,7 @@
 #define PIN_ARCADE_BUTTON_SIG 13
 */
 
+/*
 // Arcade Buttons
 #define PIN_BUTTON_1 A1
 #define PIN_BUTTON_2 A2
@@ -35,13 +36,14 @@
 #define PIN_BUTTON_4 11
 #define PIN_BUTTON_5 A5
 #define PIN_BUTTON_6 A3
+*/
 
 // Limit switches
-#define PIN_LIM_X 8
-#define PIN_LIM_Y 9
+#define PIN_LIM_X 7
+#define PIN_LIM_Y 4                            
 
 // Electromagnet
-#define PIN_MAGNET 10
+#define PIN_MAGNET A1
 
 // Serial
 #define SERIAL_BAUD_RATE 115200
@@ -79,8 +81,8 @@ int executionInterval = 50;
 int switchInterval = 6;
 
 // Boundaries (implied bounds at minX=0, minY=0)
-const long maxX = 1860;
-const long maxY = 2630;
+const long maxX = 1790;
+const long maxY = 2960;
 
 const int optimizeDistanceThreshold = 0; // How close we need to be (euclidian distance) to the target position to start executing the next command.
 
@@ -164,15 +166,6 @@ void printReedSwitchValuesFromColumn(int column) {
   ));
 }
 
-void printArcadeButtonCount(int row) {
-  if (inputButtonCount[row] >= 16) {
-    Serial.print(hexDigits[15]);
-  } else {
-    Serial.print(hexDigits[inputButtonCount[row]]);
-  }
-  inputButtonCount[row] = 0;
-}
-
 static long pow10[10] = {
   1,
   10,
@@ -247,8 +240,8 @@ void dequeueCommand() {
   front = newFront;
 }
 
-/*
 bool tempButtonValue;
+/*
 void updateSwitchesAndButtons() {
   currentTime = millis();
   for (int column = 0; column < 12; column++) {
@@ -264,29 +257,15 @@ void updateSwitchesAndButtons() {
       digitalWrite(PIN_MUX_RANK_S2, (row & BIT2) == BIT2);
       delayMicroseconds(20);
       reedSwitchValues[column][row] = (digitalRead(PIN_MUX_SIG) == LOW); // Read reed switches
-      if (row < 6) {
-        tempButtonValue = (digitalRead(PIN_ARCADE_BUTTON_SIG) == LOW); // Read arcade buttons
-        if (tempButtonValue != inputButtonValues[row] && currentTime >= inputButtonLastPressed[row] + DEBOUNCE_THRESHOLD) { // Button was pressed or released
-          if (tempButtonValue) {
-            inputButtonCount[row]++; // Update count on positive edge
-          }
-          inputButtonValues[row] = tempButtonValue;
-          inputButtonLastPressed[row] = currentTime;
-        }
-      }
-    }
+    } 
   }
 }
 */
 
-void updateButtons() {
-  
-}
-
 void sendTelemetry() {
   // Sends portions of the telemetry data.
   // We split it into chunks to avoid sending too much at once, which holds up the rest of our system.
-  if (currentTelemetryChunk >= 3) { // Wrap around to beginning of message.
+  if (currentTelemetryChunk > 1) { // Wrap around to beginning of message.
     currentTelemetryChunk = 0;
   }
   switch (currentTelemetryChunk) {
@@ -302,7 +281,9 @@ void sendTelemetry() {
     case 1:
       Serial.print(',');
       Serial.print(QUEUE_SIZE - count); // Available slots in queue
+      Serial.println();
       break;
+    /*
     case 2:
       // Arcade-style buttons
       Serial.print(',');
@@ -320,6 +301,7 @@ void sendTelemetry() {
       ));
       Serial.println(); // End of message
       break;
+    */
     default:
       Serial.println("ERROR: Ran out of telemetry chunks without resetting");
       currentTelemetryChunk = 0;
@@ -458,7 +440,7 @@ void homeMotors() {
   
   // Move in -x direction until we hit the switch or go for maxX steps
   tempCount = 0;
-  while (tempCount < maxX) {
+  while (tempCount < maxX + 100) {
     if (digitalRead(PIN_LIM_X) == LOW) { // Hit the limit switch
       break;
     }
@@ -471,13 +453,13 @@ void homeMotors() {
 
   // Error handling
   if (tempCount >= maxX) { // Uh oh, we moved the full width of the board and didn't hit the X limit switch
-    Serial.print("ERROR Fatal: Home sequence did not contact X-axis limit switch.");
+    Serial.println("ERROR Fatal: Home sequence did not contact X-axis limit switch.");
     abortMission();
   }
 
   // Move in -y direction until we hit the switch or go for maxY steps
   tempCount = 0;
-  while (tempCount < maxY) {
+  while (tempCount < maxY + 100) {
     if (digitalRead(PIN_LIM_Y) == LOW) { // Hit the limit switch
       break;
     }
@@ -490,7 +472,7 @@ void homeMotors() {
 
   // Error handling
   if (tempCount >= maxY) { // Uh oh, we moved the full width of the board and didn't hit the X limit switch
-    Serial.print("ERROR Fatal: Home sequence did not contact Y-axis limit switch.");
+    Serial.println("ERROR Fatal: Home sequence did not contact Y-axis limit switch.");
     abortMission();
   }
 
@@ -511,14 +493,14 @@ void setup() {
   pinMode(PIN_DIR_B, OUTPUT);
   pinMode(PIN_STEP_B, OUTPUT);
 
+  /*
   pinMode(PIN_BUTTON_1, INPUT_PULLUP);
   pinMode(PIN_BUTTON_2, INPUT_PULLUP);
   pinMode(PIN_BUTTON_3, INPUT_PULLUP);
   pinMode(PIN_BUTTON_4, INPUT_PULLUP);
   pinMode(PIN_BUTTON_5, INPUT_PULLUP);
   pinMode(PIN_BUTTON_6, INPUT_PULLUP);
-  
-  /*
+
   pinMode(PIN_MUX_SIG, INPUT_PULLUP);
   pinMode(PIN_ARCADE_BUTTON_SIG, INPUT_PULLUP);
 
@@ -530,16 +512,16 @@ void setup() {
   pinMode(PIN_MUX_FILE_S2, OUTPUT);
   pinMode(PIN_MUX_FILE_S3, OUTPUT);
   */
-  
+
   pinMode(PIN_LIM_X, INPUT_PULLUP);
   pinMode(PIN_LIM_Y, INPUT_PULLUP);
-  
+
   pinMode(PIN_MAGNET, OUTPUT);
 
   digitalWrite(PIN_EN_MOTORS, LOW); // Turn on motors for homing
   motorsEnabled = false;
 
-  digitalWrite(PIN_MAGNET, LOW); // Ensure magnet is off
+  //digitalWrite(PIN_MAGNET, LOW); // Ensure magnet is off
   magnetUp = false;
   
   homeMotors();
@@ -602,7 +584,6 @@ void loop() {
     
     executionTimer += executionInterval;
   }
-  
   /*
   else if (currentTime >= switchTimer) {
     updateSwitchesAndButtons();

@@ -217,6 +217,7 @@ You should be in Play mode
 2. Board->Theme.
 """
 
+import random
 
 # Images/60
 blank = os.path.join(IMAGE_PATH, 'blank.png')
@@ -233,12 +234,31 @@ queenW = os.path.join(IMAGE_PATH, 'wQ.png')
 kingB = os.path.join(IMAGE_PATH, 'bK.png')
 kingW = os.path.join(IMAGE_PATH, 'wK.png')
 
+bishopB_transparent = os.path.join(IMAGE_PATH, 'bB_transparent.png')
+bishopW_transparent = os.path.join(IMAGE_PATH, 'wB_transparent.png')
+pawnB_transparent = os.path.join(IMAGE_PATH, 'bP_transparent.png')
+pawnW_transparent = os.path.join(IMAGE_PATH, 'wP_transparent.png')
+knightB_transparent = os.path.join(IMAGE_PATH, 'bN_transparent.png')
+knightW_transparent = os.path.join(IMAGE_PATH, 'wN_transparent.png')
+rookB_transparent = os.path.join(IMAGE_PATH, 'bR_transparent.png')
+rookW_transparent = os.path.join(IMAGE_PATH, 'wR_transparent.png')
+queenB_transparent = os.path.join(IMAGE_PATH, 'bQ_transparent.png')
+queenW_transparent = os.path.join(IMAGE_PATH, 'wQ_transparent.png')
+kingB_transparent = os.path.join(IMAGE_PATH, 'bK_transparent.png')
+kingW_transparent = os.path.join(IMAGE_PATH, 'wK_transparent.png')
+
+blank_question = os.path.join(IMAGE_PATH, 'blank_question.png')
 
 images = {BISHOPB: bishopB, BISHOPW: bishopW, PAWNB: pawnB, PAWNW: pawnW,
           KNIGHTB: knightB, KNIGHTW: knightW,
           ROOKB: rookB, ROOKW: rookW, KINGB: kingB, KINGW: kingW,
           QUEENB: queenB, QUEENW: queenW, BLANK: blank}
-
+transparent_images = {BISHOPB: bishopB_transparent, BISHOPW: bishopW_transparent,
+          PAWNB: pawnB_transparent, PAWNW: pawnW_transparent,
+          KNIGHTB: knightB_transparent, KNIGHTW: knightW_transparent,
+          ROOKB: rookB_transparent, ROOKW: rookW_transparent, KINGB: kingB_transparent,
+          KINGW: kingW_transparent, QUEENB: queenB_transparent, QUEENW: queenW_transparent,
+          BLANK: blank}
 
 # Promote piece from psg (pysimplegui) to pyc (python-chess)
 promote_psg_to_pyc = {KNIGHTB: chess.KNIGHT, BISHOPB: chess.BISHOP,
@@ -1512,25 +1532,58 @@ class EasyChessGui:
         :return:
         """
 
+        reedSwitches = {}
+
+        # DEBUG: Random reed switches
+        for i in range(8):
+            for j in range(8):
+                reedSwitches[(i, j)] = (i + j) % 2 == random.randint(0, 1)
+            for j in range(4):
+                reedSwitches[(i, j - BANK_OFFSET)] = (i + j) % 2 == random.randint(0, 1)
+
         # Board
         for i in range(8):
             for j in range(8):
                 color = self.sq_dark_color if (i + j) % 2 else \
                         self.sq_light_color
-                piece_image = images[self.psg_board[i][j]]
+                if reedSwitches[(i, j)]:
+                    piece_image = images[self.psg_board[i][j]]
+                else:
+                    piece_image = transparent_images[self.psg_board[i][j]]
+                
                 elem = window.find_element(key=(i, j))
-                elem.Update(button_color=('white', color),
-                            image_filename=piece_image, )
+                if self.psg_board[i][j] != BLANK:
+                    elem.Update(button_color=('white', color),
+                                image_filename=piece_image, )
+                elif reedSwitches[(i, j)]:
+                    elem.Update(button_color=('white', color),
+                                image_filename=blank_question, )
+                else: # Blank, no reed switch
+                    elem.Update(button_color=('white', color),
+                                image_filename=piece_image, )
+                elem.Update()
         
         # Bank
         for i in range(8):
             for j in range(4):
                 color = self.sq_dark_color if (i + j) % 2 else \
                         self.sq_light_color
-                piece_image = images[self.psg_bank[i][j]]
+                if reedSwitches[(i, j - BANK_OFFSET)]:
+                    piece_image = images[self.psg_bank[i][j]]
+                else:
+                    piece_image = transparent_images[self.psg_bank[i][j]]
+                
                 elem = window.find_element(key=(i, j - BANK_OFFSET))
-                elem.Update(button_color=('white', color),
-                            image_filename=piece_image, )
+                if self.psg_bank[i][j] != BLANK:
+                    elem.Update(button_color=('white', color),
+                                image_filename=piece_image, )
+                elif reedSwitches[(i, j - BANK_OFFSET)]:
+                    elem.Update(button_color=('white', color),
+                                image_filename=blank_question, )
+                else: # Blank, no reed switch
+                    elem.Update(button_color=('white', color),
+                                image_filename=piece_image, )
+                elem.Update()
 
     def render_square(self, image, key, location):
         """ Returns an RButton (Read Button) with image image """
@@ -1713,6 +1766,7 @@ class EasyChessGui:
                 if to_bank[current_type] > 0:
                     self.psg_bank[i][j] = current_type
                     to_bank[current_type] -= 1
+
     def set_depth_limit(self):
         """ Returns max depth based from user setting """
         user_depth = sg.PopupGetText(
@@ -2508,6 +2562,8 @@ class EasyChessGui:
             sys.exit(0)
 
         self.clear_elements(window)
+        self.update_bank_from_board()
+        self.redraw_board(window)
 
         return False if is_exit_game else is_new_game
 

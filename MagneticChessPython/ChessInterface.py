@@ -152,8 +152,8 @@ class ChessInterface:
         self.lastMoveTime = time.time()
         self.movesSinceLastHome = 0
         self.gameEnded = False
-        self.whiteElo = 600
-        self.blackElo = 600
+        self.whiteElo = 1320
+        self.blackElo = 1320
 
         self.WhiteAiLevel=3
         self.BlackAiLevel=3
@@ -177,8 +177,8 @@ class ChessInterface:
         if (elo == None):
             return self.stockfish.play(self.board, chess.engine.Limit(time=0.2)).move
         else:
-            self.texel.configure({"UCI_LimitStrength": True, "UCI_Elo": elo})
-            return self.texel.play(self.board, chess.engine.Limit(time=0.2)).move
+            self.stockfish.configure({"UCI_LimitStrength": True, "UCI_Elo": elo})
+            return self.stockfish.play(self.board, chess.engine.Limit(time=0.2)).move
     
     def getEval(self):
         # Get the evaluation of the current board position from white's perspective
