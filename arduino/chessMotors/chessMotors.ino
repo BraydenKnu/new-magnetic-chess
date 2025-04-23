@@ -50,7 +50,7 @@
 
 // Incoming command queue
 #define QUEUE_SIZE 5
-#define COMMAND_LEN 12 // Length of command in chars
+#define COMMAND_LEN 13 // Length of command in chars
 
 // Configuration
 #define DEBOUNCE_THRESHOLD 10 // In ms, amount we need to wait before detecting an edge of any type
@@ -75,14 +75,14 @@ long executionTimer = 0;
 long switchTimer = 0;
 
 // Timer intervals
-int motorIntervalMicros = 1200;
+int motorIntervalMicros = 600;
 int telemetryInterval = 4;
 int executionInterval = 50;
 int switchInterval = 6;
 
 // Boundaries (implied bounds at minX=0, minY=0)
-const long maxX = 1790;
-const long maxY = 2960;
+const long maxX = 6950;
+const long maxY = 11900;
 
 const int optimizeDistanceThreshold = 0; // How close we need to be (euclidian distance) to the target position to start executing the next command.
 
@@ -106,6 +106,11 @@ bool hasIdlePosition = false;
 long idleA;
 long idleB;
 int currentTelemetryChunk = 0;
+
+//1h corner #UPX0200Y00500
+//8h corner center x #UPX6950Y00500
+// bank 8 pawn #UPX6950Y11900
+//bank 1 pawn #UPX0250Y11850
 
 /*  REED SWITCH INDEXING - Indexed by reedSwitchValues[column][row]
  *      _________ _________________
@@ -345,7 +350,7 @@ void executeNextCommand() {
   }
   
   long newTargetX = getDigitsFromNextCommand(3, 4);
-  long newTargetY = getDigitsFromNextCommand(8, 4);
+  long newTargetY = getDigitsFromNextCommand(8, 5);
 
   // Check whether this command is valid
   if (!isInPlane(newTargetX, newTargetY)) {
